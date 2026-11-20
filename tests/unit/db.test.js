@@ -5,10 +5,10 @@ import { migrate } from '../../src/main/db.js';
 let pool;
 afterAll(() => pool?.end());
 
-test('freshTestDb creates the 3 tables', async () => {
+test('freshTestDb creates all tables', async () => {
   pool = await freshTestDb();
   const [rows] = await pool.query('SHOW TABLES');
-  expect(rows.map((r) => Object.values(r)[0]).sort()).toEqual(['employees', 'offices', 'users']);
+  expect(rows.map((r) => Object.values(r)[0]).sort()).toEqual(['employees', 'offices', 'record_employees', 'records', 'signatories', 'signatory_defaults', 'users']);
 });
 
 test('migrate is idempotent', async () => {
@@ -40,5 +40,5 @@ test('tables are utf8mb4 even inside a pre-existing latin1 database', async () =
   const p = (await import('../../src/main/db.js')).createPool(config);
   const [rows] = await p.query('SELECT TABLE_NAME AS t, TABLE_COLLATION AS c FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?', [database]);
   await p.end();
-  expect(rows.map((r) => r.c)).toEqual(['utf8mb4_unicode_ci', 'utf8mb4_unicode_ci', 'utf8mb4_unicode_ci']);
+  expect(rows.map((r) => r.c)).toEqual(Array(7).fill('utf8mb4_unicode_ci'));
 });

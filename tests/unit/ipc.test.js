@@ -67,7 +67,7 @@ test('changePassword without login → Not logged in', async () => {
 
 test('thrown error → generic message', async () => {
   await loginChanged(1);
-  await pool.query('DROP TABLE employees');
+  await pool.query('RENAME TABLE employees TO employees_gone'); // breaks the query; FKs block DROP
   const orig = console.error;
   console.error = () => {};
   try {
