@@ -1,8 +1,8 @@
 export const EMPLOYMENT_STATUSES = ['Permanent', 'Casual', 'Coterminous', 'Contractual', 'Job Order'];
 
-const fieldErrors = (errors) => ({ ok: false, error: 'Check the highlighted fields', errors });
-const text = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
-const isDup = (e) => e.code === 'ER_DUP_ENTRY';
+export const fieldErrors = (errors) => ({ ok: false, error: 'Check the highlighted fields', errors });
+export const text = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
+export const isDup = (e) => e.code === 'ER_DUP_ENTRY';
 // LIKE wildcards in user input must match literally.
 const likeLiteral = (s) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
