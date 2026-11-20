@@ -1,0 +1,51 @@
+{
+  "name": "pls-to-records-system",
+  "version": "1.0.0",
+  "description": "PLS and TO records system",
+  "main": "src/main/main.js",
+  "scripts": {
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "test": "vitest run",
+    "test:e2e": "npm run build && playwright test",
+    "dist": "npm run build && electron-builder --win"
+  },
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "productName": "PLS-TO Records System",
+  "dependencies": {
+    "mysql2": "^3.24.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@tailwindcss/vite": "^4.3.5",
+    "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^41.2.2",
+    "electron-builder": "^26.18.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1"
+  },
+  "build": {
+    "appId": "ph.lgu.plsto",
+    "productName": "PLS-TO Records System",
+    "files": [
+      "src/main/**",
+      "dist/renderer/**",
+      "package.json"
+    ],
+    "directories": {
+      "output": "dist/app"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "dir"
+      ]
+    }
+  },
+  "private": true
+}

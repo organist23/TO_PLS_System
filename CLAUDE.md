@@ -44,8 +44,12 @@ In addition to clearly communicating, it's important that we clearly communicate
 
 Fill in per project. `feature-workflow` reads these.
 
-- Trust boundaries (step 10 runs `/security-review` when a diff touches these): <auth, payments, file upload, ...>
-- UI test driver (step 8, only if not `claude-in-chrome`): <Playwright / Cypress / none>
-- Test command (fast unit and integration suite, runs every phase): <npm test / pytest / ...>
-- Full E2E command (step 8 decides when it runs): <npx playwright test / none / ...>
+- App: PLS-TO Records System. Spec in `spec.md`, phases in `roadmap.md`.
+- Stack: Electron desktop app on a single PC, React + Tailwind UI, Node main process, local MySQL. No network or web version.
+- Print templates: `examples/actual_files/` (`NEW PLS.xlsx`, `NEW TO.xlsx`, `NEW PLS SB.xlsx`, `NEW TO SB.xlsx`). Output is filled .xlsx, A4 portrait.
+- Numbering: `YYYY-MM-N` (Mayor's Office) and `SB YYYY-MM-N` (SB), 4 counters (office × form type), N resets monthly.
+- Trust boundaries (step 10 runs `/security-review` when a diff touches these): auth (login, sessions, password hashing, admin role checks), Electron IPC and preload bridge, SQL queries, file writes (xlsx export, backup), database restore.
+- UI test driver (step 8, only if not `claude-in-chrome`): Playwright (`_electron` launcher). `claude-in-chrome` cannot drive Electron.
+- Test command (fast unit and integration suite, runs every phase): `npm test` (Vitest, against a test MySQL database).
+- Full E2E command (step 8 decides when it runs): `npx playwright test`
 

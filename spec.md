@@ -1,0 +1,217 @@
+# Spec: PLS-TO Records System
+
+## Goal
+An Electron desktop app on one PC (React + Tailwind, Node, local MySQL) where HR staff log in, encode Personnel Locator Slip (PLS) and Travel Order (TO) records for the Mayor's Office and the Sangguniang Bayan (SB) with auto-numbers that reset monthly, print them as filled .xlsx forms or numbered blank forms, and see who is out today and per-office reports.
+
+## Assumptions
+- One PC runs the app and MySQL locally (WAMP, MySQL 5.7). No network access needed.
+- Database connection defaults to localhost, user `root`, empty password, database `pls_to`. A `.env` file in the app's data folder overrides them per installed device.
+- Users are HR/records staff only. Roles: **admin** and **encoder**. Employees never log in.
+- Admin-only: manage user accounts. Everything else is open to both roles.
+- The first run creates one admin account. The admin must change its password at first login.
+- Two form types: PLS and TO. Two issuing offices: Mayor's Office and SB.
+- Four independent counters: Mayor PLS, Mayor TO, SB PLS, SB TO.
+- Number format: `YYYY-MM-N` for the Mayor's Office (`2026-01-1`), `SB YYYY-MM-N` for SB (`SB 2026-01-1`). N resets to 1 on the first record of each month. The month is the month the record is created, not the travel date.
+- Print layouts come from `examples/actual_files/` (`NEW PLS.xlsx`, `NEW TO.xlsx`, `NEW PLS SB.xlsx`, `NEW TO SB.xlsx`): A4 portrait, logo header, up to 5 name rows, recommending and approving signatory blocks.
+- Mayor's Office forms: recommending = Department Head, approving = Municipal Mayor (or OIC/Acting). SB forms: recommending = SB Secretary, approving = Municipal Vice Mayor (or OIC/Acting).
+- Signatories change often (OIC, Acting). Staff can set an office default and override it per record.
+- Records are never permanently deleted. Archive only.
+
+## User Stories
+
+### US-1: Log in and log out
+**As** HR staff, **I want** to log in with username and password, **so that** only staff can access records.
+
+**Accepts when:**
+- [ ] Valid username and password opens the dashboard.
+- [ ] Logout ends the session. Every page after logout redirects to login.
+- [ ] Passwords are stored hashed.
+- [ ] First run creates an admin account that must set a new password at first login.
+
+**Rejects when:**
+- [ ] Wrong username or password shows "Invalid username or password" and does not say which one is wrong.
+- [ ] A disabled account cannot log in.
+- [ ] A page cannot be opened without a session.
+
+### US-2: Manage user accounts (admin)
+**As** an admin, **I want** to add encoders, reset passwords, and disable accounts, **so that** I control who has access.
+
+**Accepts when:**
+- [ ] Admin adds a user with username, full name, role, and initial password.
+- [ ] Admin resets a user's password.
+- [ ] Admin disables and re-enables a user after a confirmation that names the user.
+
+**Rejects when:**
+- [ ] An encoder cannot open the user management page or call its API.
+- [ ] A duplicate username is rejected with a message.
+- [ ] An admin cannot disable their own account or the last active admin.
+
+### US-3: Manage offices and employees
+Changed 2026-11-20: added restore from archive, office archive blocked while it has active employees, fixed employment status list (user decisions before Phase 0 plan).
+
+**As** HR staff, **I want** a master list of offices and employees (name, designation, employment status, office), **so that** encoders pick names instead of typing them and office reports stay accurate.
+
+**Accepts when:**
+- [ ] Staff add, edit, and archive offices.
+- [ ] Staff add, edit, and archive employees.
+- [ ] Archived employees and offices disappear from pick lists but remain on old records.
+- [ ] The list searches by name and filters by office.
+- [ ] Employment status is one of: Permanent, Casual, Coterminous, Contractual, Job Order.
+- [ ] An "Archived" filter lists archived offices and employees. Restore returns them to pick lists.
+
+**Rejects when:**
+- [ ] An employee without a name or office is rejected with a field message.
+- [ ] An office with active employees cannot be archived. The message says "Move or archive its N employees first."
+- [ ] A duplicate employee (same name in the same office) is rejected.
+- [ ] Archiving needs a confirmation that names the item. Cancel changes nothing.
+
+### US-4: Manage signatories
+**As** HR staff, **I want** to keep a list of signatories (name and title, e.g. "VINCENT E. HERMOSO, OIC - MUNICIPAL MAYOR") and set each office's default, **so that** forms print the correct signer even when OIC or Acting officials change.
+
+**Accepts when:**
+- [ ] Staff add, edit, and archive signatories with name, title, and role (Recommending or Approving).
+- [ ] Staff set the default recommending and approving signatory for the Mayor's Office and for SB.
+- [ ] Changing a default affects only records created after the change.
+- [ ] A record keeps the signatory name and title it was saved with, even after the signatory is edited or archived.
+
+**Rejects when:**
+- [ ] A signatory without a name or title is rejected.
+- [ ] An archived signatory cannot be picked on new records.
+
+### US-5: Create a PLS or TO record
+**As** HR staff, **I want** to choose PLS or TO and the issuing office, then fill in the details, **so that** the record gets the next number automatically.
+
+**Accepts when:**
+- [ ] The form asks for: form type, issuing office, date, 1 to 5 employees (from the master list), destination, vehicle, inclusive dates, departure date and time, return date and time, purpose, recommending signatory, approving signatory.
+- [ ] Signatories pre-fill with the office default and can be changed.
+- [ ] Saving assigns the next number for that form type, office, and month (e.g. `2026-11-1`, then `2026-11-2`, and `SB 2026-11-1` separately).
+- [ ] The first record of a new month starts at 1.
+- [ ] Save shows a loading state, then a success message with the number.
+
+**Rejects when:**
+- [ ] A 6th employee cannot be added.
+- [ ] Missing required fields show a message next to each field.
+- [ ] Return before departure is rejected.
+- [ ] Clicking Save twice creates one record with one number.
+- [ ] Two numbers are never the same for one counter, even after a restore (US-14).
+
+### US-6: Print a filled form as .xlsx
+**As** HR staff, **I want** to print a record on the official PLS or TO layout, **so that** it can be signed on paper.
+
+**Accepts when:**
+- [ ] Print generates an .xlsx matching the issuing office's and form type's template: logo, A4 portrait, the record's number, date, names with designation and employment status, destination, vehicle, dates, times, purpose, and both signatory names and titles.
+- [ ] The file opens in Excel and prints on one A4 page.
+- [ ] Staff choose where to save it. The app offers to open it after saving.
+
+**Rejects when:**
+- [ ] An archived record cannot be printed until it is restored.
+- [ ] A failed save (e.g. file open in Excel) shows an error and does not change the record.
+
+### US-7: Issue a numbered blank form
+**As** HR staff, **I want** to print a blank form that already has a number, **so that** an employee can fill it by hand while the number stays reserved.
+
+**Accepts when:**
+- [ ] Staff choose form type and issuing office, then "Issue blank".
+- [ ] It takes the next number from the same counter as US-5 and saves a record with status **Blank issued**.
+- [ ] The printed .xlsx has the number and signatories filled and all other fields blank.
+- [ ] Staff later open the Blank issued record, fill the details, and save. The number does not change and the status becomes **Filled**.
+
+**Rejects when:**
+- [ ] A Blank issued record does not appear in "who is out today" or office reports until it is filled.
+
+### US-8: Edit a record
+**As** HR staff, **I want** to fix a record's details, **so that** mistakes can be corrected.
+
+**Accepts when:**
+- [ ] Every field from US-5 can be edited except number, form type, and issuing office.
+- [ ] Save shows success and the new values appear in the list and on the next print.
+
+**Rejects when:**
+- [ ] The same validation as US-5 applies.
+- [ ] Number, form type, and issuing office cannot be changed.
+
+### US-9: Archive and restore a record
+**As** HR staff, **I want** to archive a wrong or cancelled record, **so that** it leaves the active list without losing its number.
+
+**Accepts when:**
+- [ ] Archive asks for confirmation naming the record number. Cancel changes nothing.
+- [ ] An archived record is hidden from the default list, reports, and "out today".
+- [ ] The "Archived" filter shows archived records. Restore returns a record to the active list.
+
+**Rejects when:**
+- [ ] An archived record's number is never reused.
+- [ ] No permanent delete exists.
+
+### US-10: Browse, search, and filter records
+**As** HR staff, **I want** to find records quickly, **so that** I can view, edit, or reprint them.
+
+**Accepts when:**
+- [ ] The list shows number, form type, issuing office, names, destination, and inclusive dates, newest first.
+- [ ] Search matches number, employee name, destination, or purpose.
+- [ ] Filters: form type, issuing office, employee office, date range, status (Filled, Blank issued, Archived).
+- [ ] Opening a record shows all its details.
+
+**Rejects when:**
+- [ ] A search with no results shows "No records found", not an empty table.
+
+### US-11: See who is out today
+**As** HR staff, **I want** to see which employees are out on a PLS or TO today, **so that** I can answer "where is this person?".
+
+**Accepts when:**
+- [ ] The dashboard lists every employee on an active Filled record whose inclusive dates include today, with office, form type, number, destination, and return time.
+- [ ] Staff can pick another date instead of today.
+- [ ] The list groups or filters by office.
+
+**Rejects when:**
+- [ ] Archived and Blank issued records do not appear.
+
+### US-12: Per-office report and Excel export
+**As** HR staff, **I want** a report of PLS and TO records per office for a date range, **so that** I can monitor who applied.
+
+**Accepts when:**
+- [ ] Filters: office, form type, date range.
+- [ ] The report shows each employee's records and a count per office and form type.
+- [ ] Export saves the same rows as an .xlsx.
+
+**Rejects when:**
+- [ ] Archived and Blank issued records are excluded.
+- [ ] A date range with end before start is rejected.
+
+### US-13: Back up the database
+**As** HR staff, **I want** to save a .sql backup to a folder or USB, **so that** records survive a PC failure.
+
+**Accepts when:**
+- [ ] Backup writes a .sql file named with date and time (e.g. `pls-to-backup-2026-11-20-1430.sql`) to the chosen folder.
+- [ ] It shows success with the file path, or the error if it fails.
+
+**Rejects when:**
+- [ ] A failed backup leaves no partial file that looks valid.
+
+### US-14: Restore from a backup
+**As** HR staff, **I want** to restore a .sql backup, **so that** I can recover records after a failure.
+
+**Accepts when:**
+- [ ] Restore asks for confirmation naming the file and stating that all current data will be replaced. Cancel changes nothing.
+- [ ] Before restoring, the app saves an automatic backup of the current data and shows its path.
+- [ ] After restore, the user is logged out and must log in again.
+
+**Rejects when:**
+- [ ] A file that is not a valid backup of this app is rejected and current data is unchanged.
+
+## Critical workflows
+- CW-1: Issue and print a record: US-1 → US-3 → US-4 → US-5 → US-6
+- CW-2: Blank form lifecycle: US-1 → US-7 → US-8 → US-11
+- CW-3: Recover data: US-13 → US-14 → US-1 → US-10
+
+## Out of Scope
+- Multi-PC or LAN access: single PC was chosen.
+- Web/browser version: Electron only.
+- Employees filing their own requests: staff encode everything.
+- Approval workflow (Draft/Approved/Returned): signing happens on paper.
+- Permanent delete: archive only.
+- More than 5 names per slip: staff create a second slip.
+- Import from the HRMO Excel file: the master list is maintained in the app.
+- PDF output: .xlsx only.
+
+## Open Questions
+- None.
