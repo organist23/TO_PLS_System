@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { btn } from './ui.jsx';
 
-export default function ConfirmDialog({ open, title, message, confirmLabel, error, pending, onConfirm, onCancel }) {
+export default function ConfirmDialog({ open, title, message, confirmLabel, error, pending, onConfirm, onCancel, confirmClass = btn.danger }) {
   const ref = useRef(null);
   useEffect(() => {
     const d = ref.current;
@@ -22,7 +22,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel, erro
       <h2 id="confirm-title" className="text-lg font-semibold text-slate-900">
         {title}
       </h2>
-      <p className="mt-2 text-sm text-slate-600">{message}</p>
+      <div className="mt-2 text-sm text-slate-600">{message}</div>
       {error && (
         <p role="alert" className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
           {error}
@@ -34,7 +34,7 @@ export default function ConfirmDialog({ open, title, message, confirmLabel, erro
             Cancel
           </button>
         )}
-        <button type="button" className={btn.danger} disabled={pending} onClick={onConfirm}>
+        <button type="button" className={confirmClass} disabled={pending} onClick={onConfirm}>
           {pending ? 'Working…' : confirmLabel}
         </button>
       </div>
