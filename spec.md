@@ -66,6 +66,8 @@ Changed 2026-11-20: added restore from archive, office archive blocked while it 
 - [ ] Archiving needs a confirmation that names the item. Cancel changes nothing.
 
 ### US-4: Manage signatories
+Changed 2026-11-21: restore from archive, archive blocked while a signatory is an office default (user decisions before Phase 1 plan).
+
 **As** HR staff, **I want** to keep a list of signatories (name and title, e.g. "VINCENT E. HERMOSO, OIC - MUNICIPAL MAYOR") and set each office's default, **so that** forms print the correct signer even when OIC or Acting officials change.
 
 **Accepts when:**
@@ -73,12 +75,17 @@ Changed 2026-11-20: added restore from archive, office archive blocked while it 
 - [ ] Staff set the default recommending and approving signatory for the Mayor's Office and for SB.
 - [ ] Changing a default affects only records created after the change.
 - [ ] A record keeps the signatory name and title it was saved with, even after the signatory is edited or archived.
+- [ ] An "Archived" filter lists archived signatories. Restore returns them to pick lists.
 
 **Rejects when:**
 - [ ] A signatory without a name or title is rejected.
 - [ ] An archived signatory cannot be picked on new records.
+- [ ] A signatory that is an office default cannot be archived. The message says "It is the default for <office>. Choose another default first."
+- [ ] Archiving needs a confirmation that names the signatory. Cancel changes nothing.
 
 ### US-5: Create a PLS or TO record
+Changed 2026-11-21: required fields, optional vehicle and return, editable filed date, employee details kept as saved, overlap warning (user decisions before Phase 1 plan).
+
 **As** HR staff, **I want** to choose PLS or TO and the issuing office, then fill in the details, **so that** the record gets the next number automatically.
 
 **Accepts when:**
@@ -87,11 +94,17 @@ Changed 2026-11-20: added restore from archive, office archive blocked while it 
 - [ ] Saving assigns the next number for that form type, office, and month (e.g. `2026-11-1`, then `2026-11-2`, and `SB 2026-11-1` separately).
 - [ ] The first record of a new month starts at 1.
 - [ ] Save shows a loading state, then a success message with the number.
+- [ ] Required: form type, issuing office, date filed, 1 to 5 employees, destination, inclusive dates, departure date and time, purpose, both signatories. Vehicle and return are optional.
+- [ ] Date filed pre-fills with today and can be changed. The number's month is still the month the record is created.
+- [ ] A record keeps each employee's name, designation, and employment status as they were when saved.
+- [ ] When an employee is already on another active PLS or TO whose inclusive dates overlap, Save shows a warning naming the employee, the other record's number, and its dates (e.g. "Ana Cruz already has TO 2026-11-3 on 2026-11-20 to 2026-11-22"). Nothing is saved until staff click "Save anyway". Cancel keeps the form as it was.
 
 **Rejects when:**
 - [ ] A 6th employee cannot be added.
 - [ ] Missing required fields show a message next to each field.
 - [ ] Return before departure is rejected.
+- [ ] Inclusive end date before start date is rejected.
+- [ ] An archived employee or signatory cannot be picked.
 - [ ] Clicking Save twice creates one record with one number.
 - [ ] Two numbers are never the same for one counter, even after a restore (US-14).
 

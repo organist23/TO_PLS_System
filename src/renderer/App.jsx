@@ -3,10 +3,17 @@ import Login from './pages/Login.jsx';
 import ChangePassword from './pages/ChangePassword.jsx';
 import Employees from './pages/Employees.jsx';
 import Offices from './pages/Offices.jsx';
+import Signatories from './pages/Signatories.jsx';
+import NewRecord from './pages/NewRecord.jsx';
 import DbError from './pages/DbError.jsx';
 
 const dbError = location.hash.startsWith('#db-error=') ? decodeURIComponent(location.hash.slice('#db-error='.length)) : null;
-const PAGES = { employees: ['Employees', Employees], offices: ['Offices', Offices] };
+const PAGES = {
+  employees: ['Employees', Employees],
+  offices: ['Offices', Offices],
+  signatories: ['Signatories', Signatories],
+  newRecord: ['New record', NewRecord],
+};
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = still checking the session
