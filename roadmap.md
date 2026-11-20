@@ -2,7 +2,7 @@
 
 ## Part one — Encode and print PLS and TO forms
 
-### Phase 0 — Login and employee master list NEXT
+### Phase 0 — Login and employee master list ✅ DONE (merged `b1200a5`, 2026-11-20)
 
 Proves the stack end to end (Electron, React + Tailwind, Node, local MySQL) with the smallest real outcome. Every later story needs a logged-in user and employees to pick.
 Covers US-1, US-3.
@@ -10,11 +10,15 @@ Covers US-1, US-3.
 - Staff log in and log out. First run creates the admin and forces a password change.
 - Staff add, edit, archive, and search offices and employees.
 
-**Done when:** in the packaged Electron app, the seeded admin changes the password, logs in, adds an office and an employee, archives the employee, and logs out. Pages refuse access after logout. Every US-1 and US-3 condition passes in E2E.
+**Done when:** in the packaged Electron app, the seeded admin changes the password, logs in, adds an office and an employee, archives the employee, and logs out. Pages refuse access after logout. Every US-1 and US-3 condition passes in E2E. — **Verified** on 2026-11-20 with Playwright `_electron` against the packaged `win-unpacked` exe, all US-1 and US-3 conditions plus DB-error page and navigation lock (29/29 E2E, 43/43 unit). Results: `docs/test-results/PHASE-0-TEST-RESULTS.md`. Regression: none, first phase.
+
+Shipped as `src/main/auth.js`: `hashPassword`, `verifyPassword`, `ensureAdmin`, `login`, `changePassword`. `src/main/directory.js`: `listOffices`, `createOffice`, `updateOffice`, `archiveOffice`, `restoreOffice`, `listEmployees`, `createEmployee`, `updateEmployee`, `archiveEmployee`, `restoreEmployee`, `EMPLOYMENT_STATUSES`. `src/main/ipc.js`: `registerIpc`, `CHANNELS`. `src/main/db.js`: `createPool`, `migrate`. `src/main/config.js`: `loadConfig`. `src/main/main.js`, `src/main/preload.cjs`. `src/renderer/App.jsx`, `pages/Login.jsx`, `ChangePassword.jsx`, `Offices.jsx`, `Employees.jsx`, `DbError.jsx`, `components/ConfirmDialog.jsx`, `components/ui.jsx`. Tables: users, offices, employees.
 
 Deliberately not built, and why: user management, because Phase 6 owns US-2. Records and numbering, because Phase 1 owns US-5.
 
-### Phase 1 — Signatories and record creation with auto-numbering LATER
+Conventions later phases inherit: every IPC result is `{ ok, data }` or `{ ok: false, error, errors? }`. A new channel goes in `ipc.js` ROUTES with an access level (`public`, `loggedIn`, `ready`) and in the `preload.cjs` allowlist (a unit test checks they match). Text input is trimmed and inner spaces collapsed (`text()` in `directory.js`). Removal is archive (`archived_at`), never DELETE. Every table declares `utf8mb4_unicode_ci`. Schema changes are `CREATE TABLE IF NOT EXISTS` only, so the first phase that alters a table adds a `schema_version` table. Tests run only on a database ending in `_test`. Electron is pinned at 41.2.2.
+
+### Phase 1 — Signatories and record creation with auto-numbering NEXT
 
 A record needs signatories and employees, and the numbering rule is the core business rule.
 Covers US-4, US-5.
