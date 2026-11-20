@@ -18,7 +18,7 @@ Deliberately not built, and why: user management, because Phase 6 owns US-2. Rec
 
 Conventions later phases inherit: every IPC result is `{ ok, data }` or `{ ok: false, error, errors? }`. A new channel goes in `ipc.js` ROUTES with an access level (`public`, `loggedIn`, `ready`) and in the `preload.cjs` allowlist (a unit test checks they match). Text input is trimmed and inner spaces collapsed (`text()` in `directory.js`). Removal is archive (`archived_at`), never DELETE. Every table declares `utf8mb4_unicode_ci`. Schema changes are `CREATE TABLE IF NOT EXISTS` only, so the first phase that alters a table adds a `schema_version` table. Tests run only on a database ending in `_test`. Electron is pinned at 41.2.2.
 
-### Phase 1 — Signatories and record creation with auto-numbering NEXT
+### Phase 1 — Signatories and record creation with auto-numbering ✅ DONE (merged `183a13b`, 2026-11-21)
 
 A record needs signatories and employees, and the numbering rule is the core business rule.
 Covers US-4, US-5.
@@ -26,11 +26,17 @@ Covers US-4, US-5.
 - Staff maintain signatories and office defaults.
 - Staff create PLS and TO records for both offices with numbers from 4 monthly counters.
 
-**Done when:** records created in two different months and for all 4 counters get the right numbers (`2026-11-1`, `SB 2026-11-1`, reset on a new month). A double-click on Save creates one record.
+**Done when:** records created in two different months and for all 4 counters get the right numbers (`2026-11-1`, `SB 2026-11-1`, reset on a new month). A double-click on Save creates one record. — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe: all US-4 and US-5 conditions incl. overlap warning (49/49 full E2E, 67/67 unit). Month reset, 5 concurrent saves and restore-safe numbering verified at unit level with an injected clock. Results: `docs/test-results/PHASE-1-TEST-RESULTS.md`. Regression: full suite (schema change), US-1 and US-3 pass.
+
+Shipped as `src/main/signatories.js`: `ISSUING_OFFICES`, `ROLES`, `listSignatories`, `createSignatory`, `updateSignatory`, `archiveSignatory`, `restoreSignatory`, `getDefaults`, `setDefault`, `activeSignatory`. `src/main/records.js`: `FORM_TYPES`, `formatNumber`, `periodOf`, `createRecord`. `src/main/directory.js`: `fieldErrors`, `text`, `isDup` now exported. `src/main/ipc.js` routes `signatories:*`, `records:create`. `src/renderer/pages/Signatories.jsx`, `NewRecord.jsx`. `components/ConfirmDialog.jsx` (`confirmClass` prop). Tables: signatories, signatory_defaults, records, record_employees.
 
 Deliberately not built, and why: printing, because Phase 2 owns US-6. Record list and edit, because Phase 3 owns US-8 and US-10.
 
-### Phase 2 — Print filled and blank forms LATER
+Picked up from Phase 0: conventions (IPC shape, ROUTES + allowlist, `text()`, archive-only, utf8mb4 tables, `_test` databases).
+
+Conventions later phases inherit: a record number is never assigned outside `createRecord`'s per-counter `GET_LOCK` (`plsto:<form>:<office>:<period>`) plus `MAX(seq)+1`. US-7 blank forms must reuse it. The period is the creation month in local time. Records hold snapshots (employee name, designation, status, office_id; signatory name and title), so printing reads the record, not the master lists. Overlap means inclusive dates intersect on an active record, and it warns with `overlaps` and is confirmed with `confirmOverlap: true`. Users approved: vehicle and return optional, date filed editable.
+
+### Phase 2 — Print filled and blank forms NEXT
 
 Covers US-6, US-7.
 
