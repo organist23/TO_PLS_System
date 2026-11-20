@@ -8,7 +8,7 @@ Database: `pls_to_test` on local WAMP MySQL 5.7.26, dropped and recreated per te
 
 ```
 Feature: Phase 0, US-1, US-3
-Feature tests: unit and integration (39, Vitest) for config, db, auth, directory, ipc. E2E for US-1, US-3
+Feature tests: unit and integration (43, Vitest) for config, db, auth, directory, ipc. E2E for US-1, US-3
 Regression E2E: none, no DONE phases
 System E2E: none, CW-1..3 need Phase 1+ stories
 Full E2E run: no (the Phase 0 E2E suite is the whole suite: 29/29, packaged app)
