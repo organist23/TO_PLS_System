@@ -111,3 +111,21 @@ test.describe('US-1 startup without a database', () => {
     }
   });
 });
+
+test.describe('US-1 session stays inside the app window', () => {
+  test('navigating the window away (e.g. a dropped file) is blocked', async () => {
+    const { app, page, pool } = await launchApp();
+    try {
+      await loginAsChangedAdmin(page);
+      await page.evaluate(() => (location.href = 'file:///C:/Windows/win.ini'));
+      await page.waitForTimeout(1500); // shortcut: fixed wait — a blocked navigation emits no event to wait on
+      // Playwright's auto-wait hangs on a cancelled navigation, so read the URL from the main process.
+      const url = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getURL());
+      expect(url).toMatch(/dist\/renderer\/index\.html$/);
+      expect(await page.getByRole('heading', { name: 'Employees' }).count()).toBe(1);
+    } finally {
+      await app.close();
+      await pool.end();
+    }
+  });
+});

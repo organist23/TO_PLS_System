@@ -26,6 +26,10 @@ async function start() {
     },
   });
 
+  // The window only ever shows our own page: a dropped file or link must not replace it and inherit window.api.
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
   try {
     const config = loadConfig(envPath);
     await migrate(config);

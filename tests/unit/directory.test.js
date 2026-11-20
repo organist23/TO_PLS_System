@@ -133,3 +133,24 @@ test('archived employee row keeps its office (archive is not delete)', async () 
   expect(row.office_id).toBe(id);
   expect(row.archived_at).not.toBeNull();
 });
+
+test('double spaces inside a name count as a duplicate and are saved collapsed', async () => {
+  const id = await office('MHO');
+  await emp(id, 'Juan Dela Cruz');
+  expect((await emp(id, 'Juan  Dela   Cruz')).errors).toEqual({ fullName: 'This employee already exists in this office' });
+  await d.createOffice(pool, { name: 'Municipal  Engineering   Office' });
+  expect(names(await d.listOffices(pool, {}))).toContain('Municipal Engineering Office');
+});
+
+test('re-adding an archived employee says to restore it', async () => {
+  const id = await office('MHO');
+  const e = (await emp(id, 'Ana Cruz')).data.id;
+  await d.archiveEmployee(pool, { id: e });
+  expect((await emp(id, 'Ana Cruz')).errors).toEqual({ fullName: 'This employee is archived in this office. Restore it instead.' });
+});
+
+test('re-adding an archived office says to restore it', async () => {
+  const id = await office('MHO');
+  await d.archiveOffice(pool, { id });
+  expect((await d.createOffice(pool, { name: 'MHO' })).errors).toEqual({ name: 'This office is archived. Restore it instead.' });
+});

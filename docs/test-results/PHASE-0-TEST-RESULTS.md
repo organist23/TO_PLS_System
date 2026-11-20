@@ -11,10 +11,10 @@ Feature: Phase 0, US-1, US-3
 Feature tests: unit and integration (39, Vitest) for config, db, auth, directory, ipc. E2E for US-1, US-3
 Regression E2E: none, no DONE phases
 System E2E: none, CW-1..3 need Phase 1+ stories
-Full E2E run: no (the Phase 0 E2E suite is the whole suite: 28/28)
+Full E2E run: no (the Phase 0 E2E suite is the whole suite: 29/29, packaged app)
 ```
 
-## US-1 Log in and log out — `tests/e2e/features/us-1-login.spec.js` — PASS 13/13
+## US-1 Log in and log out — `tests/e2e/features/us-1-login.spec.js` — PASS 14/14
 
 | Condition | Result |
 |---|---|
@@ -31,6 +31,7 @@ Full E2E run: no (the Phase 0 E2E suite is the whole suite: 28/28)
 | New password works, default no longer does | PASS |
 | Double-click Sign in: one login, no error | PASS |
 | MySQL unreachable → readable error page with config path | PASS |
+| Window cannot be navigated away (dropped file) — review fix I-3 | PASS |
 
 ## US-3 Manage offices and employees — `tests/e2e/features/us-3-offices-employees.spec.js` — PASS 15/15
 
@@ -62,3 +63,10 @@ Full E2E run: no (the Phase 0 E2E suite is the whole suite: 28/28)
 ## Left behind
 
 Nothing outside `pls_to_test`. Screenshots and traces only in git-ignored `/test-results/`.
+
+## Review fixes (step 10), each RED → GREEN
+
+- I-1 double spaces inside names → collapsed, counted as duplicate (`directory.test.js`).
+- I-2 re-adding an archived employee/office → "…archived… Restore it instead." (`directory.test.js`).
+- I-3 window navigation locked (`will-navigate`, `setWindowOpenHandler`). Without it the window navigated to `file:///C:/Windows/win.ini` with the session (`us-1-login.spec.js`).
+- M-2 (re-graded Important) tables declare utf8mb4 so a pre-existing latin1 `pls_to` cannot store Ñ wrong (`db.test.js`).

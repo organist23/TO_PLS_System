@@ -8,12 +8,12 @@ CREATE TABLE IF NOT EXISTS users (
   must_change_password TINYINT(1) NOT NULL DEFAULT 0,
   active TINYINT(1) NOT NULL DEFAULT 1,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE IF NOT EXISTS offices (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(150) NOT NULL UNIQUE,
   archived_at DATETIME NULL
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 CREATE TABLE IF NOT EXISTS employees (
   id INT AUTO_INCREMENT PRIMARY KEY,
   full_name VARCHAR(150) NOT NULL,
@@ -23,4 +23,4 @@ CREATE TABLE IF NOT EXISTS employees (
   archived_at DATETIME NULL,
   UNIQUE KEY uq_employee_office (full_name, office_id),
   CONSTRAINT fk_employee_office FOREIGN KEY (office_id) REFERENCES offices(id)
-) ENGINE=InnoDB;
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

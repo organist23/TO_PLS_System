@@ -1,7 +1,7 @@
 export const EMPLOYMENT_STATUSES = ['Permanent', 'Casual', 'Coterminous', 'Contractual', 'Job Order'];
 
 const fieldErrors = (errors) => ({ ok: false, error: 'Check the highlighted fields', errors });
-const text = (v) => String(v ?? '').trim();
+const text = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
 const isDup = (e) => e.code === 'ER_DUP_ENTRY';
 // LIKE wildcards in user input must match literally.
 const likeLiteral = (s) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -30,7 +30,12 @@ async function saveOffice(pool, id, input) {
     const [r] = await pool.query('INSERT INTO offices (name) VALUES (?)', [name]);
     return { ok: true, data: { id: r.insertId } };
   } catch (e) {
-    if (isDup(e)) return fieldErrors({ name: 'An office with this name already exists' });
+    if (isDup(e)) {
+      const [[o]] = await pool.query('SELECT archived_at FROM offices WHERE name = ?', [name]);
+      return fieldErrors({
+        name: o?.archived_at ? 'This office is archived. Restore it instead.' : 'An office with this name already exists',
+      });
+    }
     throw e;
   }
 }
@@ -107,7 +112,17 @@ async function saveEmployee(pool, id, input) {
     );
     return { ok: true, data: { id: r.insertId } };
   } catch (e) {
-    if (isDup(e)) return fieldErrors({ fullName: 'This employee already exists in this office' });
+    if (isDup(e)) {
+      const [[row]] = await pool.query('SELECT archived_at FROM employees WHERE full_name = ? AND office_id = ?', [
+        fullName,
+        officeId,
+      ]);
+      return fieldErrors({
+        fullName: row?.archived_at
+          ? 'This employee is archived in this office. Restore it instead.'
+          : 'This employee already exists in this office',
+      });
+    }
     throw e;
   }
 }

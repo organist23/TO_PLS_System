@@ -27,3 +27,18 @@ test('refuses non-test db', async () => {
 test('rejects unsafe db name', async () => {
   await expect(migrate({ ...testConfig(), database: 'x; DROP' })).rejects.toThrow();
 });
+
+test('tables are utf8mb4 even inside a pre-existing latin1 database', async () => {
+  const config = testConfig();
+  const { database, ...server } = config;
+  const mysql = (await import('mysql2/promise')).default;
+  const conn = await mysql.createConnection(server);
+  await conn.query(`DROP DATABASE IF EXISTS \`${database}\``);
+  await conn.query(`CREATE DATABASE \`${database}\` CHARACTER SET latin1`);
+  await conn.end();
+  await migrate(config);
+  const p = (await import('../../src/main/db.js')).createPool(config);
+  const [rows] = await p.query('SELECT TABLE_NAME AS t, TABLE_COLLATION AS c FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?', [database]);
+  await p.end();
+  expect(rows.map((r) => r.c)).toEqual(['utf8mb4_unicode_ci', 'utf8mb4_unicode_ci', 'utf8mb4_unicode_ci']);
+});
