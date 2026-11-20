@@ -35,3 +35,30 @@ export async function loginAsChangedAdmin(page) {
 }
 
 export const invoke = (page, channel, payload) => page.evaluate(([c, p]) => window.api.invoke(c, p), [channel, payload]);
+
+// Setup through the real IPC handlers (not the UI under test): office MHO, employees, 2 signatories per role, MAYOR+SB defaults.
+export async function seedDirectory(page, employeeNames = ['Ana Cruz', 'Ben Reyes', 'Carla Diaz', 'Dino Lim', 'Ela Santos', 'Fe Ramos']) {
+  const officeId = (await invoke(page, 'offices:create', { name: 'MHO' })).data.id;
+  const employees = {};
+  for (const fullName of employeeNames) {
+    employees[fullName] = (await invoke(page, 'employees:create', { fullName, designation: 'Clerk', employmentStatus: 'Permanent', officeId })).data.id;
+  }
+  const sig = async (name, title, role) => (await invoke(page, 'signatories:create', { name, title, role })).data.id;
+  const s = {
+    deptHead: await sig('JUAN P. SANTOS', 'DEPARTMENT HEAD', 'recommending'),
+    sbSec: await sig('GLENDA P. MINA', 'SB SECRETARY', 'recommending'),
+    mayor: await sig('VINCENT E. HERMOSO', 'OIC - MUNICIPAL MAYOR', 'approving'),
+    viceMayor: await sig('RIC RONELSON D. ASUNCION', 'MUNICIPAL VICE MAYOR', 'approving'),
+  };
+  for (const [issuingOffice, role, signatoryId] of [
+    ['MAYOR', 'recommending', s.deptHead], ['MAYOR', 'approving', s.mayor],
+    ['SB', 'recommending', s.sbSec], ['SB', 'approving', s.viceMayor],
+  ]) await invoke(page, 'signatories:setDefault', { issuingOffice, role, signatoryId });
+  return { officeId, employees, signatories: s };
+}
+
+// Local YYYY-MM of the test machine's clock (hand-derived expectation, not the app's code).
+export const thisMonth = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
