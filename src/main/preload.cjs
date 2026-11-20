@@ -5,6 +5,9 @@ const ALLOWED = [
   'auth:login', 'auth:me', 'auth:logout', 'auth:changePassword',
   'offices:list', 'offices:create', 'offices:update', 'offices:archive', 'offices:restore',
   'employees:list', 'employees:create', 'employees:update', 'employees:archive', 'employees:restore',
+  'signatories:list', 'signatories:create', 'signatories:update', 'signatories:archive', 'signatories:restore',
+  'signatories:defaults', 'signatories:setDefault',
+  'records:create',
 ];
 
 contextBridge.exposeInMainWorld('api', {

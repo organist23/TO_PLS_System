@@ -1,5 +1,7 @@
 import { login, changePassword } from './auth.js';
 import * as directory from './directory.js';
+import * as signatories from './signatories.js';
+import { createRecord } from './records.js';
 
 // Access levels: public, logged in (password change may be pending), ready (logged in, password changed).
 const ROUTES = {
@@ -32,8 +34,16 @@ const ROUTES = {
       ['employees:update', directory.updateEmployee],
       ['employees:archive', directory.archiveEmployee],
       ['employees:restore', directory.restoreEmployee],
+      ['signatories:list', signatories.listSignatories],
+      ['signatories:create', signatories.createSignatory],
+      ['signatories:update', signatories.updateSignatory],
+      ['signatories:archive', signatories.archiveSignatory],
+      ['signatories:restore', signatories.restoreSignatory],
+      ['signatories:defaults', signatories.getDefaults],
+      ['signatories:setDefault', signatories.setDefault],
     ].map(([ch, fn]) => [ch, ['ready', ({ pool, p }) => fn(pool, p)]]),
   ),
+  'records:create': ['ready', ({ pool, user, p }) => createRecord(pool, p, { userId: user.id })],
 };
 
 // preload.cjs keeps its own copy of this list (a sandboxed preload cannot import ESM); ipc.test.js checks they match.
