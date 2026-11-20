@@ -120,7 +120,13 @@ export async function createRecord(pool, input, { userId, now = new Date() }) {
       throw e;
     }
   } finally {
-    if (locked) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]);
-    conn.release();
+    try {
+      if (locked) await conn.query('SELECT RELEASE_LOCK(?)', [lockName]);
+      conn.release();
+    } catch (e) {
+      // The record may already be committed: don't turn success into an error. Ending the session frees the lock.
+      console.error('[records] RELEASE_LOCK failed', e);
+      conn.destroy();
+    }
   }
 }

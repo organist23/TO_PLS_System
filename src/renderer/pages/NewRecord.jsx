@@ -142,6 +142,7 @@ export default function NewRecord() {
             </div>
             <button type="button" className={btn.secondary} onClick={addEmployee} disabled={full || !pick}>Add</button>
           </div>
+          {lists.employees.length === 0 && <p className="text-sm text-slate-600">No active employees. Add them on Employees.</p>}
           {full && <p className="text-sm text-slate-600">At most 5 employees</p>}
           {errors.employees && <p id="rec-employees-error" className="text-sm text-red-700">{errors.employees}</p>}
           {form.employeeIds.length > 0 && (
@@ -173,9 +174,15 @@ export default function NewRecord() {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Recommending approval" id="rec-recommendingId" error={errors.recommendingId}>
             <select {...field('recommendingId')}><option value="">Choose a signatory</option>{signatoryOptions('recommending')}</select>
+            {signatoryOptions('recommending').length === 0 && (
+              <p className="mt-1 text-sm text-slate-600">No active recommending signatories. Add them on Signatories.</p>
+            )}
           </Field>
           <Field label="Approved by" id="rec-approvingId" error={errors.approvingId}>
             <select {...field('approvingId')}><option value="">Choose a signatory</option>{signatoryOptions('approving')}</select>
+            {signatoryOptions('approving').length === 0 && (
+              <p className="mt-1 text-sm text-slate-600">No active approving signatories. Add them on Signatories.</p>
+            )}
           </Field>
         </div>
 

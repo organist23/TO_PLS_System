@@ -1,5 +1,5 @@
 import { test, expect, beforeEach, afterEach } from 'vitest';
-import { freshTestDb } from '../helpers/testDb.js';
+import { freshTestDb, testConfig } from '../helpers/testDb.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee } from '../../src/main/directory.js';
 import { createSignatory, archiveSignatory, updateSignatory } from '../../src/main/signatories.js';
@@ -137,3 +137,29 @@ test('overlap edges: same last day overlaps, next day does not, other employee o
   await pool.query('UPDATE records SET archived_at = NOW()');
   expect((await create({ inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' })).ok).toBe(true);
 });
+
+test('a failed lock release after commit still reports success and does not block the counter', async () => {
+  const realGet = pool.getConnection.bind(pool);
+  pool.getConnection = async () => {
+    const conn = await realGet();
+    const realQuery = conn.query.bind(conn);
+    conn.query = (sql, ...rest) =>
+      String(sql).startsWith('SELECT RELEASE_LOCK') ? Promise.reject(new Error('connection lost')) : realQuery(sql, ...rest);
+    return conn;
+  };
+  const first = await create({});
+  pool.getConnection = realGet;
+  expect(first.ok).toBe(true);
+  expect(first.data.number).toBe('2026-11-1');
+  // Ask from a separate session: named locks are re-entrant, so the holder itself would not notice.
+  const mysql = (await import('mysql2/promise')).default;
+  const other = await mysql.createConnection(testConfig());
+  let free = 0;
+  for (let i = 0; i < 20 && free !== 1; i++) {
+    [[{ free }]] = await other.query("SELECT IS_FREE_LOCK('plsto:PLS:MAYOR:2026-11') AS free");
+    if (free !== 1) await new Promise((r) => setTimeout(r, 100));
+  }
+  await other.end();
+  expect(free).toBe(1);
+  expect(await numberOf({ employeeIds: [ids.emps[1]] })).toBe('2026-11-2');
+}, 20000);

@@ -159,3 +159,19 @@ test.describe('US-5 Create a PLS or TO record', () => {
     expect(await count()).toBe(2);
   });
 });
+
+test.describe('US-5 empty pick lists', () => {
+  test('explains what to add when there are no employees or signatories', async () => {
+    const { app, page, pool } = await launchApp();
+    try {
+      await loginAsChangedAdmin(page);
+      await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
+      await expect(page.getByText('No active employees. Add them on Employees.')).toBeVisible();
+      await expect(page.getByText('No active recommending signatories. Add them on Signatories.')).toBeVisible();
+      await expect(page.getByText('No active approving signatories. Add them on Signatories.')).toBeVisible();
+    } finally {
+      await app.close();
+      await pool.end();
+    }
+  });
+});

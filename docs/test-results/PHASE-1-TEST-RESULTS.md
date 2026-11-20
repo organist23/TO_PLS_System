@@ -8,10 +8,10 @@ Database: `pls_to_test` on local WAMP MySQL 5.7.26, recreated per test. `pls_to`
 
 ```
 Feature: Phase 1, US-4, US-5
-Feature tests: unit and integration (66, Vitest) incl. signatories.js, records.js, ipc routes, schema. E2E for US-4, US-5
+Feature tests: unit and integration (67, Vitest) incl. signatories.js, records.js, ipc routes, schema. E2E for US-4, US-5
 Regression E2E: US-1, US-3 (Phase 0) — App.jsx nav, ipc.js ROUTES, preload allowlist, directory.js exports changed
 System E2E: none, CW-1 needs US-6 (Phase 2)
-Full E2E run: yes, schema change (4 new tables) — 48/48
+Full E2E run: yes, schema change (4 new tables) — 49/49
 ```
 
 ## US-4 Manage signatories — `tests/e2e/features/us-4-signatories.spec.js` — PASS 7/7
@@ -26,7 +26,7 @@ Full E2E run: yes, schema change (4 new tables) — 48/48
 | Archive → Archived filter → Restore; archived not pickable on New record | PASS |
 | Saved record keeps signatory name and title after edit | PASS |
 
-## US-5 Create a PLS or TO record — `tests/e2e/features/us-5-create-record.spec.js` — PASS 12/12
+## US-5 Create a PLS or TO record — `tests/e2e/features/us-5-create-record.spec.js` — PASS 13/13
 
 | Condition | Result |
 |---|---|
@@ -42,6 +42,7 @@ Full E2E run: yes, schema change (4 new tables) — 48/48
 | Date filed editable, number month unchanged | PASS |
 | Employee details kept as saved | PASS |
 | Overlap warning text; Cancel saves nothing; Save anyway → next number | PASS |
+| Empty pick lists explain what to add (review fix) | PASS |
 
 Month reset (`2026-11-30 23:59` → `2026-11-3`, `2026-12-01 00:00` → `2026-12-1`), 5 concurrent saves on one counter, restore-safe numbering and tampered payloads are covered at unit level (`records.test.js`) with an injected clock.
 
@@ -60,3 +61,8 @@ US-1 14/14, US-3 15/15 (part of the full run).
 ## Left behind
 
 Nothing outside `pls_to_test`. Traces only in git-ignored `/test-results/`.
+
+## Review fixes (step 10), each RED → GREEN
+
+- Minor 1 re-graded Important: a failed `RELEASE_LOCK` after commit no longer reports an error for a saved record. The connection is destroyed, which frees the lock (`records.test.js`; with `release()` instead the lock stays held, red).
+- Minor 5 re-graded Important (UI scope: empty states are required): New record explains missing employees and signatories (`us-5-create-record.spec.js`).
