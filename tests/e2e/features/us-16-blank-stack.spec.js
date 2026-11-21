@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { launchApp, loginAsChangedAdmin, seedDirectory, seedRecord, thisMonth, mockSaveDialog, saveFromPreview, blankFormsSection } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, seedRecord, thisMonth, mockSaveDialog, saveFromPreview, blankFormsSection, recordForm } from '../helpers.js';
 
 const ExcelJS = createRequire(import.meta.url)('exceljs'); // Playwright's ESM loader cannot import exceljs directly
 
@@ -34,8 +34,10 @@ test.describe('US-16 Print a stack of blank forms', () => {
 
   test('the confirmation names count, numbers and the chosen signatories before anything is reserved; Cancel reserves nothing', async () => {
     await seedRecord(page, seed); // <m>-1 already used
-    // The Save form above keeps its own Approved by (the default Mayor); only the section's choice is used for blanks.
-    await expect(page.locator('#rec-approvingId')).toHaveValue(String(seed.signatories.mayor));
+    // The Save form keeps its own choices; only the section's are used for blanks.
+    await recordForm(page).getByRole('radio', { name: 'TO', exact: true }).check();
+    await recordForm(page).getByRole('radio', { name: 'Sangguniang Bayan' }).check();
+    await recordForm(page).getByLabel('Approved by').selectOption({ label: 'VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR' }); // differs from the section's choice below
     await blankFormsSection(page).getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' }); // e.g. an Acting Mayor
     await expect(blankFormsSection(page)).toContainText('Left empty: the Department Head of whoever takes the form signs the paper.');
     await page.getByLabel('How many').fill('5');

@@ -56,6 +56,7 @@ export default function NewRecord({ params = {}, go }) {
   // Print blank forms has its own choices: nothing typed in the Save form is used for blank forms.
   const [stack, setStack] = useState({ formType: 'PLS', issuingOffice: 'MAYOR', recommendingId: '', approvingId: '' });
   const [stackErrors, setStackErrors] = useState({});
+  const [stackError, setStackError] = useState(''); // an issue failure with no field of its own
   const [estimate, setEstimate] = useState(null); // numbers the stack would get: { first, last } | 'loading' | { error }
   const [lookup, setLookup] = useState({ formType: 'PLS', number: '', pending: false, error: '', encodedId: null });
   const [months, setMonths] = useState([]); // past months with unused blanks (US-18)
@@ -198,6 +199,7 @@ export default function NewRecord({ params = {}, go }) {
   async function issueBlank() {
     setIssuing(true);
     setStackErrors({});
+    setStackError('');
     setFormError('');
     setNotice('');
     setSaved(null);
@@ -210,7 +212,11 @@ export default function NewRecord({ params = {}, go }) {
     });
     setIssuing(false);
     setIssueOpen(false);
-    if (!res.ok) return res.errors ? setStackErrors(res.errors) : setFormError(res.error);
+    if (!res.ok) {
+      const shown = ['count', 'recommendingId', 'approvingId'];
+      if (res.errors && Object.keys(res.errors).every((k) => shown.includes(k))) return setStackErrors(res.errors);
+      return setStackError(res.errors ? Object.values(res.errors).join(' ') : res.error);
+    }
     const { formType, ids, numbers } = res.data;
     setNotice(ids.length === 1
       ? `Issued blank ${formType} ${numbers[0]}`
@@ -289,6 +295,9 @@ export default function NewRecord({ params = {}, go }) {
       aria-invalid={!!stackErrors[key]} aria-describedby={stackErrors[key] ? `stack-${key}-error` : undefined}>
       <option value="">Choose a signatory</option>{signatoryOptions(role)}
     </select>
+  );
+  const noSigners = (role) => signatoryOptions(role).length === 0 && (
+    <p className="mt-1 text-sm text-slate-600">No active {role} signatories. Add them on Signatories.</p>
   );
 
   return (
@@ -404,7 +413,7 @@ export default function NewRecord({ params = {}, go }) {
         </div>
       </form>
 
-      {!editing && !params.mode && (
+      {!editing && !params.mode && !filling && (
       <section aria-labelledby="stack-heading" className="space-y-6 rounded-md border border-slate-200 bg-white p-6">
         <div>
           <h2 id="stack-heading" className="text-base font-semibold text-slate-900">Print blank forms</h2>
@@ -423,10 +432,15 @@ export default function NewRecord({ params = {}, go }) {
               <p className="mt-2 text-sm text-slate-600">Left empty: the Department Head of whoever takes the form signs the paper.</p>
             </div>
           ) : (
-            <Field label="Recommending approval" id="stack-recommendingId" error={stackErrors.recommendingId}>{stackSelect('recommendingId', 'recommending')}</Field>
+            <Field label="Recommending approval" id="stack-recommendingId" error={stackErrors.recommendingId}>
+              {stackSelect('recommendingId', 'recommending')}{noSigners('recommending')}
+            </Field>
           )}
-          <Field label="Approved by" id="stack-approvingId" error={stackErrors.approvingId}>{stackSelect('approvingId', 'approving')}</Field>
+          <Field label="Approved by" id="stack-approvingId" error={stackErrors.approvingId}>
+            {stackSelect('approvingId', 'approving')}{noSigners('approving')}
+          </Field>
         </div>
+        {stackError && <Banner>{stackError}</Banner>}
         <div className="flex flex-wrap items-start gap-3">
           <label htmlFor="rec-count" className="pt-2 text-sm font-medium text-slate-700">How many</label>
           <div className="w-24">
