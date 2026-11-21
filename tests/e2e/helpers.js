@@ -105,3 +105,8 @@ export const localDay = (offset = 0) => {
 // Text of each body row of a table, cells joined by " | ".
 export const tableRows = (table) =>
   table.locator('tbody tr').evaluateAll((trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent).join(' | ')));
+
+// New record: the "Print blank forms" section, which has its own form, office and signatory choices.
+export const blankFormsSection = (page) => page.getByRole('region', { name: 'Print blank forms' });
+// New record: the record form itself (Save), as opposed to the Print blank forms section.
+export const recordForm = (page) => page.locator('#record-form');

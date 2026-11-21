@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, recordForm } from '../helpers.js';
 
 test.describe('US-5 Create a PLS or TO record', () => {
   let app, page, pool;
@@ -43,28 +43,28 @@ test.describe('US-5 Create a PLS or TO record', () => {
     await fill({ from: '2026-11-03' });
     await button('Save').click();
     await expect(success()).toHaveText(`Saved PLS ${ym}-2`);
-    await page.getByRole('radio', { name: 'TO', exact: true }).check();
+    await recordForm(page).getByRole('radio', { name: 'TO', exact: true }).check();
     await fill({ from: '2026-11-04' });
     await button('Save').click();
     await expect(success()).toHaveText(`Saved TO ${ym}-1`);
-    await page.getByRole('radio', { name: 'PLS', exact: true }).check();
-    await page.getByRole('radio', { name: 'Sangguniang Bayan' }).check();
+    await recordForm(page).getByRole('radio', { name: 'PLS', exact: true }).check();
+    await recordForm(page).getByRole('radio', { name: 'Sangguniang Bayan' }).check();
     await fill({ from: '2026-11-05' });
     await button('Save').click();
     await expect(success()).toHaveText(`Saved PLS SB ${ym}-1`);
   });
 
   test('signatories pre-fill from the office defaults and switch with the office', async () => {
-    await expect(page.getByLabel('Recommending approval').locator('option:checked')).toHaveText('JUAN P. SANTOS — DEPARTMENT HEAD');
-    await expect(page.getByLabel('Approved by').locator('option:checked')).toHaveText('VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR');
-    await page.getByRole('radio', { name: 'Sangguniang Bayan' }).check();
-    await expect(page.getByLabel('Recommending approval').locator('option:checked')).toHaveText('GLENDA P. MINA — SB SECRETARY');
-    await expect(page.getByLabel('Approved by').locator('option:checked')).toHaveText('RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR');
+    await expect(recordForm(page).getByLabel('Recommending approval').locator('option:checked')).toHaveText('JUAN P. SANTOS — DEPARTMENT HEAD');
+    await expect(recordForm(page).getByLabel('Approved by').locator('option:checked')).toHaveText('VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR');
+    await recordForm(page).getByRole('radio', { name: 'Sangguniang Bayan' }).check();
+    await expect(recordForm(page).getByLabel('Recommending approval').locator('option:checked')).toHaveText('GLENDA P. MINA — SB SECRETARY');
+    await expect(recordForm(page).getByLabel('Approved by').locator('option:checked')).toHaveText('RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR');
   });
 
   test('a signatory can be changed for one record', async () => {
     await fill();
-    await page.getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' });
+    await recordForm(page).getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' });
     await button('Save').click();
     await expect(success()).toContainText('Saved PLS');
     const [[r]] = await pool.query('SELECT approving_name AS n FROM records');

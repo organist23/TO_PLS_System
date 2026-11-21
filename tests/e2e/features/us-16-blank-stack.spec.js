@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { launchApp, loginAsChangedAdmin, seedDirectory, seedRecord, thisMonth, mockSaveDialog, saveFromPreview } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, seedRecord, thisMonth, mockSaveDialog, saveFromPreview, blankFormsSection } from '../helpers.js';
 
 const ExcelJS = createRequire(import.meta.url)('exceljs'); // Playwright's ESM loader cannot import exceljs directly
 
@@ -34,8 +34,10 @@ test.describe('US-16 Print a stack of blank forms', () => {
 
   test('the confirmation names count, numbers and the chosen signatories before anything is reserved; Cancel reserves nothing', async () => {
     await seedRecord(page, seed); // <m>-1 already used
-    await page.getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' }); // e.g. an Acting Mayor
-    await expect(page.getByText("Not printed on Mayor's Office blank forms: the Department Head signs the paper.")).toBeVisible();
+    // The Save form above keeps its own Approved by (the default Mayor); only the section's choice is used for blanks.
+    await expect(page.locator('#rec-approvingId')).toHaveValue(String(seed.signatories.mayor));
+    await blankFormsSection(page).getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' }); // e.g. an Acting Mayor
+    await expect(blankFormsSection(page)).toContainText('Left empty: the Department Head of whoever takes the form signs the paper.');
     await page.getByLabel('How many').fill('5');
     await button('Issue blank form').click();
     const dialog = page.getByRole('dialog', { name: "Issue 5 blank PLS for Mayor's Office?" });
@@ -49,7 +51,7 @@ test.describe('US-16 Print a stack of blank forms', () => {
   });
 
   test('confirming reserves consecutive numbers and saves one file with one page per form', async () => {
-    await page.getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' });
+    await blankFormsSection(page).getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' });
     await page.getByLabel('How many').fill('5');
     await button('Issue blank form').click();
     await button('Issue 5 blanks').click();
@@ -81,7 +83,7 @@ test.describe('US-16 Print a stack of blank forms', () => {
   });
 
   test('an SB stack prints the SB Secretary and the Vice Mayor', async () => {
-    await page.getByRole('radio', { name: 'Sangguniang Bayan' }).check();
+    await blankFormsSection(page).getByRole('radio', { name: 'Sangguniang Bayan' }).check();
     await page.getByLabel('How many').fill('2');
     await button('Issue blank form').click();
     const dialog = page.getByRole('dialog', { name: 'Issue 2 blank PLS for Sangguniang Bayan?' });
