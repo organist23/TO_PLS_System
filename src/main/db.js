@@ -13,6 +13,11 @@ const MIGRATIONS = [
        MODIFY date_filed DATE NULL, MODIFY inclusive_from DATE NULL, MODIFY inclusive_to DATE NULL,
        MODIFY departure_at DATETIME NULL`,
   ],
+  [
+    // v3: a Mayor's Office blank has no Department Head until it is filled in (US-7, US-16).
+    `ALTER TABLE records MODIFY recommending_id INT NULL, MODIFY recommending_name VARCHAR(150) NULL,
+       MODIFY recommending_title VARCHAR(150) NULL`,
+  ],
 ];
 
 export function createPool(config) {

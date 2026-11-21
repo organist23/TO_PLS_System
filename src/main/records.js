@@ -17,12 +17,13 @@ export const isDate = (s) => {
 const isDateTime = (s) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s ?? '') && isDate(s.slice(0, 10));
 const toSqlDateTime = (s) => `${s.replace('T', ' ')}:00`;
 
-// Form type, office and signatories: what a blank form prints.
-async function validateHeader(conn, input, errors) {
+// Form type, office and signatories: what a blank form prints. A Mayor's Office blank leaves the Department Head
+// empty (needRecommending false): whoever takes the paper has their own head sign it.
+async function validateHeader(conn, input, errors, needRecommending = true) {
   if (!FORM_TYPES.includes(input.formType)) errors.formType = 'Required';
   if (!ISSUING_OFFICES[input.issuingOffice]) errors.issuingOffice = 'Required';
-  const recommending = await activeSignatory(conn, input.recommendingId, 'recommending');
-  if (!recommending) errors.recommendingId = 'Choose an active recommending signatory';
+  const recommending = needRecommending ? await activeSignatory(conn, input.recommendingId, 'recommending') : null;
+  if (needRecommending && !recommending) errors.recommendingId = 'Choose an active recommending signatory';
   const approving = await activeSignatory(conn, input.approvingId, 'approving');
   if (!approving) errors.approvingId = 'Choose an active approving signatory';
   return { recommending, approving };
@@ -109,7 +110,8 @@ async function withConnection(pool, fn) {
 
 // The only place a number is assigned. A named lock per counter serializes concurrent saves
 // (FOR UPDATE on an empty range deadlocks in InnoDB); the unique key on (form, office, period, seq) is the backstop.
-async function withCounter(conn, held, formType, issuingOffice, now, insert) {
+// Assigns `count` consecutive numbers in one transaction and returns [{ id, number }].
+async function withCounter(conn, held, formType, issuingOffice, now, count, insert) {
   const period = periodOf(now);
   const lockName = `plsto:${formType}:${issuingOffice}:${period}`;
   const [[{ got }]] = await conn.query('SELECT GET_LOCK(?, 10) AS got', [lockName]);
@@ -121,10 +123,13 @@ async function withCounter(conn, held, formType, issuingOffice, now, insert) {
       'SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM records WHERE form_type = ? AND issuing_office = ? AND period = ?',
       [formType, issuingOffice, period],
     );
-    const number = formatNumber(issuingOffice, period, next);
-    const id = await insert({ period, seq: next, number });
+    const made = [];
+    for (let seq = next; seq < next + count; seq++) {
+      const number = formatNumber(issuingOffice, period, seq);
+      made.push({ id: await insert({ period, seq, number }), number });
+    }
     await conn.commit();
-    return { ok: true, data: { id, number, formType } };
+    return made;
   } catch (e) {
     await conn.rollback();
     throw e;
@@ -135,7 +140,7 @@ const HEADER_COLUMNS = `form_type, issuing_office, period, seq, number, status,
   recommending_id, recommending_name, recommending_title, approving_id, approving_name, approving_title, created_by`;
 const headerValues = (input, c, status, rec, appr, userId) => [
   input.formType, input.issuingOffice, c.period, c.seq, c.number, status,
-  rec.id, rec.name, rec.title, appr.id, appr.name, appr.title, userId,
+  rec?.id ?? null, rec?.name ?? null, rec?.title ?? null, appr.id, appr.name, appr.title, userId,
 ];
 
 export function createRecord(pool, input, { userId, now = new Date() }) {
@@ -150,7 +155,7 @@ export function createRecord(pool, input, { userId, now = new Date() }) {
       if (overlaps.length) return { ok: false, error: 'Overlapping records', overlaps };
     }
 
-    return withCounter(conn, held, input.formType, input.issuingOffice, now, async (c) => {
+    const [made] = await withCounter(conn, held, input.formType, input.issuingOffice, now, 1, async (c) => {
       const [r] = await conn.query(
         `INSERT INTO records (${HEADER_COLUMNS}, date_filed, destination, vehicle, inclusive_from, inclusive_to,
            departure_at, return_at, purpose)
@@ -160,22 +165,50 @@ export function createRecord(pool, input, { userId, now = new Date() }) {
       await insertEmployees(conn, r.insertId, employees);
       return r.insertId;
     });
+    return { ok: true, data: { id: made.id, number: made.number, formType: input.formType } };
   });
 }
 
-export function issueBlank(pool, input, { userId, now = new Date() }) {
+const MAX_STACK = 50;
+const stackCount = (v) => {
+  const n = v === '' || v === null ? NaN : Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= MAX_STACK ? n : 0;
+};
+
+// US-16: `count` consecutive blanks of one form and office under one counter lock.
+export function issueBlanks(pool, input, { userId, now = new Date() }) {
   return withConnection(pool, async (conn, held) => {
     const errors = {};
-    const { recommending, approving } = await validateHeader(conn, input, errors);
+    const count = stackCount(input.count);
+    if (!count) errors.count = `Enter a number from 1 to ${MAX_STACK}`;
+    const { recommending, approving } = await validateHeader(conn, input, errors, input.issuingOffice !== 'MAYOR');
     if (Object.keys(errors).length) return fieldErrors(errors);
-    return withCounter(conn, held, input.formType, input.issuingOffice, now, async (c) => {
+    const made = await withCounter(conn, held, input.formType, input.issuingOffice, now, count, async (c) => {
       const [r] = await conn.query(
         `INSERT INTO records (${HEADER_COLUMNS}, destination, purpose) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', '')`,
         headerValues(input, c, 'blank', recommending, approving, userId),
       );
       return r.insertId;
     });
+    return { ok: true, data: { formType: input.formType, ids: made.map((m) => m.id), numbers: made.map((m) => m.number) } };
   });
+}
+
+export async function issueBlank(pool, input, ctx) {
+  const res = await issueBlanks(pool, { ...input, count: 1 }, ctx);
+  return res.ok ? { ok: true, data: { id: res.data.ids[0], number: res.data.numbers[0], formType: res.data.formType } } : res;
+}
+
+// The numbers a stack would get now. An estimate for the confirmation: another save can take them first.
+export async function nextNumbers(pool, { formType, issuingOffice, count = 1 }, { now = new Date() } = {}) {
+  if (!FORM_TYPES.includes(formType) || !ISSUING_OFFICES[issuingOffice]) return { ok: false, error: 'Choose the form and office' };
+  const n = stackCount(count) || 1;
+  const period = periodOf(now);
+  const [[{ next }]] = await pool.query(
+    'SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM records WHERE form_type = ? AND issuing_office = ? AND period = ?',
+    [formType, issuingOffice, period],
+  );
+  return { ok: true, data: { first: formatNumber(issuingOffice, period, next), last: formatNumber(issuingOffice, period, next + n - 1) } };
 }
 
 export async function listBlank(pool) {
@@ -190,15 +223,18 @@ export async function listBlank(pool) {
 
 const GONE = { ok: false, error: 'This blank form is no longer available.' };
 
-// Fills a blank form under its printed number. Form type, office and signatories stay as printed.
+// Fills a blank form under its printed number. Form type, office and printed signatories stay as printed;
+// a Mayor's Office blank (no Department Head printed) takes the active Department Head who signed.
 export function fillBlank(pool, input, { userId }) {
   return withConnection(pool, async (conn) => {
     const [[rec]] = await conn.query(
-      "SELECT id, number, form_type FROM records WHERE id = ? AND status = 'blank' AND archived_at IS NULL",
+      "SELECT id, number, form_type, recommending_id FROM records WHERE id = ? AND status = 'blank' AND archived_at IS NULL",
       [Number(input.id) || 0],
     );
     if (!rec) return GONE;
     const errors = {};
+    const head = rec.recommending_id === null ? await activeSignatory(conn, input.recommendingId, 'recommending') : null;
+    if (rec.recommending_id === null && !head) errors.recommendingId = 'Choose an active recommending signatory';
     const employees = await validateDetails(conn, input, errors);
     if (Object.keys(errors).length) return fieldErrors(errors);
     if (input.confirmOverlap !== true) {
@@ -209,8 +245,11 @@ export function fillBlank(pool, input, { userId }) {
     try {
       const [u] = await conn.query(
         `UPDATE records SET status = 'filled', date_filed = ?, destination = ?, vehicle = ?, inclusive_from = ?, inclusive_to = ?,
-           departure_at = ?, return_at = ?, purpose = ? WHERE id = ? AND status = 'blank'`,
-        [...detailValues(input), rec.id],
+           departure_at = ?, return_at = ?, purpose = ?,
+           recommending_id = COALESCE(recommending_id, ?), recommending_name = COALESCE(recommending_name, ?),
+           recommending_title = COALESCE(recommending_title, ?)
+         WHERE id = ? AND status = 'blank'`,
+        [...detailValues(input), head?.id ?? null, head?.name ?? null, head?.title ?? null, rec.id],
       );
       if (u.affectedRows !== 1) {
         await conn.rollback();

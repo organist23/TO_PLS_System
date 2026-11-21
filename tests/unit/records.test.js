@@ -3,7 +3,7 @@ import { freshTestDb, testConfig } from '../helpers/testDb.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee } from '../../src/main/directory.js';
 import { createSignatory, archiveSignatory, updateSignatory } from '../../src/main/signatories.js';
-import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord } from '../../src/main/records.js';
+import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord, issueBlanks, nextNumbers } from '../../src/main/records.js';
 
 let pool, ids;
 const NOV = new Date(2026, 10, 20, 9, 0);
@@ -172,7 +172,8 @@ const details = (over = {}) => {
   const { formType, issuingOffice, recommendingId, approvingId, ...rest } = valid(over);
   return rest;
 };
-const fill = (id, over = {}) => fillBlank(pool, { id, ...details(over) }, { userId: ids.userId });
+// A Mayor's Office blank needs the Department Head who signed (US-7 changed).
+const fill = (id, over = {}) => fillBlank(pool, { id, recommendingId: ids.rec, ...details(over) }, { userId: ids.userId });
 
 test('purpose: 360 characters ok, 361 rejected', async () => {
   expect((await create({ purpose: 'a'.repeat(361) })).errors).toEqual({ purpose: 'At most 360 characters' });
@@ -194,9 +195,11 @@ test('issueBlank stores status blank with no dates or employees', async () => {
 });
 
 test('issueBlank validates form, office and signatory roles', async () => {
-  expect((await blank({ formType: 'XX', issuingOffice: 'CITY', recommendingId: ids.appr })).errors).toEqual({
-    formType: 'Required', issuingOffice: 'Required', recommendingId: 'Choose an active recommending signatory',
+  expect((await blank({ formType: 'XX', issuingOffice: 'CITY', approvingId: ids.rec })).errors).toEqual({
+    formType: 'Required', issuingOffice: 'Required', approvingId: 'Choose an active approving signatory',
   });
+  // US-7 changed: only an SB blank needs a recommending signatory when issued.
+  expect((await blank({ issuingOffice: 'SB', recommendingId: ids.appr })).errors).toEqual({ recommendingId: 'Choose an active recommending signatory' });
   expect(await count()).toBe(0);
 });
 
@@ -213,7 +216,7 @@ test('listBlank lists blanks newest first and drops filled ones', async () => {
 test('fillBlank keeps the number and printed signatories, ignores form, office and signatory changes', async () => {
   const { data } = await blank();
   const other = (await createSignatory(pool, { name: 'OTHER', title: 'ACTING MAYOR', role: 'approving' })).data.id;
-  const res = await fillBlank(pool, { id: data.id, ...details(), formType: 'TO', issuingOffice: 'SB', approvingId: other }, { userId: ids.userId });
+  const res = await fillBlank(pool, { id: data.id, recommendingId: ids.rec, ...details(), formType: 'TO', issuingOffice: 'SB', approvingId: other }, { userId: ids.userId });
   expect(res).toEqual({ ok: true, data: { id: data.id, number: '2026-11-1', formType: 'PLS' } });
   const [[r]] = await pool.query('SELECT status, form_type, issuing_office, approving_name, destination, date_filed FROM records WHERE id = ?', [data.id]);
   expect(r).toEqual({ status: 'filled', form_type: 'PLS', issuing_office: 'MAYOR', approving_name: 'MAYOR', destination: 'Provincial Capitol', date_filed: '2026-11-20' });
@@ -244,7 +247,7 @@ test('blank records never count as overlaps; filling one can warn', async () => 
   expect(res.overlaps.map((o) => o.number)).toEqual(['2026-11-2']);
   const [[r]] = await pool.query('SELECT status FROM records WHERE id = ?', [data.id]);
   expect(r.status).toBe('blank');
-  expect((await fillBlank(pool, { id: data.id, ...details({ inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' }), confirmOverlap: true }, { userId: ids.userId })).ok).toBe(true);
+  expect((await fillBlank(pool, { id: data.id, recommendingId: ids.rec, ...details({ inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' }), confirmOverlap: true }, { userId: ids.userId })).ok).toBe(true);
 });
 
 // ---------- Phase 3: list, get, edit, archive ----------
@@ -457,4 +460,79 @@ test('restore warns when a filled record now overlaps another; confirm restores;
   const b = (await blank()).data;
   await archiveRecord(pool, { id: b.id });
   expect((await restoreRecord(pool, { id: b.id })).ok).toBe(true);
+});
+
+// ---------- Phase 8: blank stacks ----------
+
+const stack = (over = {}, now = NOV) =>
+  issueBlanks(pool, { formType: 'PLS', issuingOffice: 'MAYOR', approvingId: ids.appr, count: 3, ...over }, { userId: ids.userId, now });
+
+test('issueBlanks reserves consecutive numbers; a Mayor blank has no Department Head yet', async () => {
+  await create({});
+  const res = await stack();
+  expect(res.ok).toBe(true);
+  expect(res.data.numbers).toEqual(['2026-11-2', '2026-11-3', '2026-11-4']);
+  expect(res.data.formType).toBe('PLS');
+  const [rows] = await pool.query('SELECT id, status, recommending_id, recommending_name, approving_name FROM records WHERE id IN (?) ORDER BY id', [res.data.ids]);
+  expect(rows.map((r) => [r.status, r.recommending_id, r.recommending_name, r.approving_name])).toEqual(Array(3).fill(['blank', null, null, 'MAYOR']));
+  expect(await numberOf({ employeeIds: [ids.emps[1]] })).toBe('2026-11-5');
+});
+
+test('issueBlanks: an SB stack keeps both signatories', async () => {
+  const sec = (await createSignatory(pool, { name: 'SB SEC', title: 'SB SECRETARY', role: 'recommending' })).data.id;
+  const res = await stack({ issuingOffice: 'SB', recommendingId: sec, count: 2 });
+  expect(res.data.numbers).toEqual(['SB 2026-11-1', 'SB 2026-11-2']);
+  const [rows] = await pool.query('SELECT recommending_name, recommending_title FROM records WHERE id IN (?)', [res.data.ids]);
+  expect(rows).toEqual(Array(2).fill({ recommending_name: 'SB SEC', recommending_title: 'SB SECRETARY' }));
+  expect((await stack({ issuingOffice: 'SB', recommendingId: null })).errors).toEqual({ recommendingId: 'Choose an active recommending signatory' });
+});
+
+test('issueBlanks refuses counts outside 1 to 50 and reserves nothing', async () => {
+  for (const count of [0, 51, 2.5, 'x', '', null]) {
+    expect((await stack({ count })).errors).toEqual({ count: 'Enter a number from 1 to 50' });
+  }
+  expect(await count()).toBe(0);
+  expect((await stack({ count: 50 })).data.numbers).toHaveLength(50);
+  expect((await stack({ count: '1' })).data.numbers).toEqual(['2026-11-51']);
+});
+
+test('concurrent stacks and a new record never share a number', async () => {
+  const results = await Promise.all([stack({ count: 5 }), stack({ count: 5 }), create({})]);
+  const numbers = [...results[0].data.numbers, ...results[1].data.numbers, results[2].data.number];
+  expect(new Set(numbers).size).toBe(11);
+  expect(numbers.map((n) => Number(n.split('-')[2])).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  // each stack is consecutive
+  for (const r of results.slice(0, 2)) {
+    const seqs = r.data.numbers.map((n) => Number(n.split('-')[2]));
+    expect(seqs).toEqual(seqs.map((_, i) => seqs[0] + i));
+  }
+}, 20000);
+
+test('nextNumbers estimates the range without reserving it', async () => {
+  await create({});
+  await create({ employeeIds: [ids.emps[1]] });
+  expect(await nextNumbers(pool, { formType: 'PLS', issuingOffice: 'MAYOR', count: 3 }, { now: NOV })).toEqual({ ok: true, data: { first: '2026-11-3', last: '2026-11-5' } });
+  expect((await nextNumbers(pool, { formType: 'TO', issuingOffice: 'SB', count: 1 }, { now: NOV })).data).toEqual({ first: 'SB 2026-11-1', last: 'SB 2026-11-1' });
+  expect(await count()).toBe(2);
+});
+
+test("filling a Mayor blank requires the active Department Head who signed and saves their name", async () => {
+  const [id] = (await stack({ count: 1 })).data.ids;
+  expect((await fillBlank(pool, { id, ...details() }, { userId: ids.userId })).errors).toEqual({ recommendingId: 'Choose an active recommending signatory' });
+  const gone = (await createSignatory(pool, { name: 'OLD HEAD', title: 'DEPARTMENT HEAD', role: 'recommending' })).data.id;
+  await archiveSignatory(pool, { id: gone });
+  expect((await fillBlank(pool, { id, recommendingId: gone, ...details() }, { userId: ids.userId })).errors).toEqual({ recommendingId: 'Choose an active recommending signatory' });
+  expect((await fillBlank(pool, { id, recommendingId: ids.appr, ...details() }, { userId: ids.userId })).errors).toEqual({ recommendingId: 'Choose an active recommending signatory' });
+  expect((await fill(id)).ok).toBe(true);
+  expect(await row(id)).toMatchObject({ status: 'filled', recommending_id: ids.rec, recommending_name: 'DEPT HEAD', recommending_title: 'DEPARTMENT HEAD', approving_name: 'MAYOR' });
+  // US-8: editing it later keeps that Department Head
+  expect((await edit(id, { destination: 'Manila' })).ok).toBe(true);
+  expect(await row(id)).toMatchObject({ recommending_name: 'DEPT HEAD', destination: 'Manila' });
+});
+
+test('filling an SB blank ignores a different recommending signatory', async () => {
+  const sec = (await createSignatory(pool, { name: 'SB SEC', title: 'SB SECRETARY', role: 'recommending' })).data.id;
+  const [id] = (await stack({ issuingOffice: 'SB', recommendingId: sec, count: 1 })).data.ids;
+  expect((await fill(id)).ok).toBe(true);
+  expect(await row(id)).toMatchObject({ recommending_id: sec, recommending_name: 'SB SEC' });
 });
