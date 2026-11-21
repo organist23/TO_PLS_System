@@ -30,7 +30,8 @@ export async function ensureAdmin(pool) {
 }
 
 export async function login(pool, username, password) {
-  const [[row]] = await pool.query('SELECT * FROM users WHERE username = ?', [String(username ?? '')]);
+  // Same trimming as when the account was created (users.js uses text()).
+  const [[row]] = await pool.query('SELECT * FROM users WHERE username = ?', [String(username ?? '').trim().replace(/\s+/g, ' ')]);
   const ok = await verifyPassword(String(password ?? ''), row?.password_hash ?? DUMMY_HASH);
   if (!row || !ok || !row.active) return null;
   return {

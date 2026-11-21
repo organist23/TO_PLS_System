@@ -147,8 +147,8 @@ const ROUTES = {
   // US-2. Disabling or resetting someone ends their open sessions, so the change takes effect at once.
   'users:list': ['admin', ({ pool }) => listUsers(pool)],
   'users:create': ['admin', ({ pool, p }) => createUser(pool, p)],
-  'users:resetPassword': ['admin', async ({ pool, sessions, p }) => {
-    const res = await resetPassword(pool, p);
+  'users:resetPassword': ['admin', async ({ pool, sessions, user, p }) => {
+    const res = await resetPassword(pool, p, { actorId: user.id });
     if (res.ok) endSessionsOf(sessions, res.data.id);
     return res;
   }],

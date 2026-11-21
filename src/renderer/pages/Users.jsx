@@ -83,14 +83,14 @@ export default function Users({ user }) {
     reset: {
       title: `Reset the password of ${confirm.target.fullName}?`,
       message: (
-        <div className="space-y-2">
+        <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); if (!confirmState.pending) confirmAction(); }}>
           <p>{confirm.target.username} will have to choose a new password at the next login. Any open session ends now.</p>
           <Field label="Temporary password" id="reset-password" error={confirmState.fieldError}>
             <input id="reset-password" type="password" autoComplete="new-password" className={inputClass} value={confirmState.password}
               aria-invalid={!!confirmState.fieldError} aria-describedby={confirmState.fieldError ? 'reset-password-error' : undefined}
               onChange={(e) => setConfirmState((s) => ({ ...s, password: e.target.value }))} />
           </Field>
-        </div>
+        </form>
       ),
       label: 'Reset password',
       className: btn.primary,
