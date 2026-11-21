@@ -81,7 +81,7 @@ const shrinkToFit = (cell, fits) => {
   restyle(cell, { font: { ...cell.font, size } });
 };
 
-export async function buildWorkbook(record) {
+export async function fillWorkbook(record) {
   const layout = LAYOUTS[`${record.form_type}-${record.issuing_office}`];
   const wb = new ExcelJS.Workbook();
   await wb.xlsx.readFile(path.join(templatesDir, layout.file));
@@ -136,5 +136,87 @@ export async function buildWorkbook(record) {
       restyle(c, { font: { ...c.font, size } });
     });
   }
-  return Buffer.from(await wb.xlsx.writeBuffer());
+  return wb;
+}
+
+export async function buildWorkbook(record) {
+  return Buffer.from(await (await fillWorkbook(record)).xlsx.writeBuffer());
+}
+
+// ---------- preview: the filled sheet as plain data the renderer draws with React (never as HTML) ----------
+
+const EMU_PER_PX = 9525;
+const colPx = (width) => Math.round(width * 7 + 5); // Excel character width at Calibri 11
+const rowPx = (pt) => Math.round((pt * 4) / 3);
+const has = (b) => Boolean(b && b.style);
+const runOf = (text, font = {}) => ({
+  text,
+  bold: Boolean(font.bold),
+  italic: Boolean(font.italic),
+  underline: Boolean(font.underline),
+  size: font.size ?? 11,
+  font: font.name ?? 'Calibri',
+});
+
+export async function previewOf(record) {
+  const wb = await fillWorkbook(record);
+  const ws = wb.worksheets[0];
+  const [last] = ws.pageSetup.printArea.split(':').slice(-1);
+  const lastCol = ws.getCell(last).col;
+  const lastRow = ws.getCell(last).row;
+
+  const cols = [];
+  for (let c = 1; c <= lastCol; c++) cols.push(colPx(ws.getColumn(c).width ?? ws.properties.defaultColWidth ?? 8.43));
+
+  // Merge master -> span; covered cells are skipped.
+  const spans = new Map();
+  const covered = new Set();
+  for (const range of ws.model.merges ?? []) {
+    const [a, b] = range.split(':').map((x) => ws.getCell(x));
+    spans.set(a.address, { rowSpan: b.row - a.row + 1, colSpan: b.col - a.col + 1 });
+    for (let r = a.row; r <= b.row; r++) for (let c = a.col; c <= b.col; c++) if (r !== a.row || c !== a.col) covered.add(`${r}:${c}`);
+  }
+
+  const rows = [];
+  for (let r = 1; r <= lastRow; r++) {
+    const cells = [];
+    for (let c = 1; c <= lastCol; c++) {
+      if (covered.has(`${r}:${c}`)) continue;
+      const cell = ws.getCell(r, c);
+      const rich = cell.value && cell.value.richText;
+      const b = cell.border ?? {};
+      cells.push({
+        col: c,
+        ...(spans.get(cell.address) ?? { rowSpan: 1, colSpan: 1 }),
+        runs: rich ? rich.map((x) => runOf(x.text, { ...cell.font, ...x.font })) : [runOf(cell.text, cell.font)],
+        align: cell.alignment?.horizontal === 'center' || cell.alignment?.horizontal === 'right' ? cell.alignment.horizontal : 'left',
+        valign: cell.alignment?.vertical === 'top' || cell.alignment?.vertical === 'middle' ? cell.alignment.vertical : 'bottom',
+        wrap: Boolean(cell.alignment?.wrapText),
+        border: { top: has(b.top), right: has(b.right), bottom: has(b.bottom), left: has(b.left) },
+      });
+    }
+    rows.push({ height: rowPx(ws.getRow(r).height ?? ws.properties.defaultRowHeight ?? 15), cells });
+  }
+
+  const pic = ws.getImages()[0];
+  let image = null;
+  if (pic) {
+    const sum = (arr, n) => arr.slice(0, n).reduce((x, y) => x + y, 0);
+    const heights = rows.map((x) => x.height);
+    const at = (a) => ({
+      x: sum(cols, a.nativeCol) + a.nativeColOff / EMU_PER_PX,
+      y: sum(heights, a.nativeRow) + a.nativeRowOff / EMU_PER_PX,
+    });
+    const tl = at(pic.range.tl);
+    const br = at(pic.range.br);
+    const img = wb.getImage(pic.imageId);
+    image = {
+      src: `data:image/${img.extension};base64,${Buffer.from(img.buffer).toString('base64')}`,
+      left: Math.round(tl.x),
+      top: Math.round(tl.y),
+      width: Math.round(br.x - tl.x),
+      height: Math.round(br.y - tl.y),
+    };
+  }
+  return { cols, rows, image };
 }
