@@ -3,7 +3,7 @@ import { btn, Banner } from '../components/ui.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
 
 // US-13 back up, US-14 restore. signOut(message) returns to Login after a restore.
-export default function Backup({ signOut }) {
+export default function Backup({ signOut, user }) {
   const [backup, setBackup] = useState({ pending: false, path: '', error: '' });
   const [restore, setRestore] = useState({ file: null, pending: false, error: '' });
 
@@ -44,6 +44,8 @@ export default function Backup({ signOut }) {
         {backup.error && <Banner>{backup.error}</Banner>}
       </section>
 
+      {/* US-14 changed: only an admin can restore (the routes refuse encoders too). */}
+      {user?.role === 'admin' && (
       <section aria-labelledby="restore-heading" className="space-y-4 rounded-md border border-slate-200 bg-white p-6">
         <div>
           <h2 id="restore-heading" className="text-base font-semibold text-slate-900">Restore</h2>
@@ -52,6 +54,7 @@ export default function Backup({ signOut }) {
         <button type="button" className={btn.secondary} disabled={restore.pending} onClick={pick}>Restore from a backup</button>
         {restore.error && <Banner>{restore.error}</Banner>}
       </section>
+      )}
 
       <ConfirmDialog
         open={!!restore.file}
