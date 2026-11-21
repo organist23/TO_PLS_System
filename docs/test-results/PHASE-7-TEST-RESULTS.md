@@ -11,14 +11,15 @@ Feature: Phase 7, US-15 (reopens US-6, US-7)
 Feature tests: unit (109, Vitest) incl. previewOf grid/merges/runs/image and "preview = saved file" for all 4 templates, records:preview route. E2E for US-15
 Regression E2E: US-6, US-7, CW-1 (print flow now goes through the preview; only a saveFromPreview step added, no assertion changed), US-5
 System E2E: CW-1
-Full E2E run: yes, NewRecord.jsx is in Phase 1 and Phase 2 "Shipped as" — 69/69
+Full E2E run: yes, NewRecord.jsx is in Phase 1 and Phase 2 "Shipped as" — 70/70
 ```
 
-## US-15 Preview a form before saving it — `tests/e2e/features/us-15-preview.spec.js` — PASS 6/6
+## US-15 Preview a form before saving it — `tests/e2e/features/us-15-preview.spec.js` — PASS 7/7
 
 | Condition | Result |
 |---|---|
 | Print opens the preview with title, form, number, names, signatory, purpose and the logo (loaded); no file yet | PASS |
+| Focus on Save as Excel once loaded; Enter saves (review fix) | PASS |
 | Save as Excel writes the file; its number equals the previewed number | PASS |
 | Close and Escape write nothing; Print works again afterwards | PASS |
 | Archived record: error shown, no preview | PASS |
@@ -44,3 +45,8 @@ In-app preview screenshots of all 4 kinds compared with the Phase 2 Excel render
 ## Left behind
 
 Nothing outside `pls_to_test`. Temp .xlsx files in the OS temp folder.
+
+## Review fixes (step 10)
+
+- Minor M2 re-graded Important (focus order is required UI behaviour): focus now moves to Save as Excel when the preview loads. RED → GREEN with the new E2E focus test.
+- Deferred minors: an archived record briefly flashes the dialog before the error; "Printing…" clears a moment before the file write finishes.

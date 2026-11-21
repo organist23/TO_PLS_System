@@ -47,7 +47,8 @@ export default function NewRecord() {
   const [issuing, setIssuing] = useState(false);
   const [preview, setPreview] = useState(null); // { id, number, formType, model }
   const previewRef = useRef(null);
-  const previewSeq = useRef(0); // a preview closed while loading must not reopen when its result arrives
+  const previewSeq = useRef(0);
+  const saveButtonRef = useRef(null); // a preview closed while loading must not reopen when its result arrives
   const busy = useRef(false);
 
   const loadBlanks = useCallback(async () => {
@@ -62,6 +63,7 @@ export default function NewRecord() {
     if (!d) return;
     if (preview && !d.open) d.showModal();
     if (!preview && d.open) d.close();
+    if (preview?.model) saveButtonRef.current?.focus(); // the button was disabled while loading, so autoFocus missed it
   }, [preview]);
 
   const load = useCallback(async () => {
@@ -378,7 +380,7 @@ export default function NewRecord() {
           {preview && (
             <div className="flex gap-3">
               <button type="button" className={btn.secondary} onClick={() => previewRef.current.close()}>Close</button>
-              <button type="button" autoFocus className={btn.primary} disabled={!preview.model} onClick={saveFromPreview}>
+              <button type="button" ref={saveButtonRef} className={btn.primary} disabled={!preview.model} onClick={saveFromPreview}>
                 Save as Excel
               </button>
             </div>

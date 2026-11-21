@@ -51,6 +51,15 @@ test.describe('US-15 Preview a form before saving it', () => {
     expect(fs.readdirSync(dir)).toEqual([]);
   });
 
+  test('focus is on Save as Excel once the preview has loaded, so Enter saves', async () => {
+    await saveRecord();
+    await button('Print').click();
+    await preview().locator('table[data-preview]').waitFor();
+    await expect(preview().getByRole('button', { name: 'Save as Excel' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText(`Saved to ${file}`)).toBeVisible();
+  });
+
   test('Save as Excel writes the file with the previewed number', async () => {
     await saveRecord();
     await button('Print').click();
