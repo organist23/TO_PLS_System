@@ -15,7 +15,7 @@ An Electron desktop app on one PC (React + Tailwind, Node, local MySQL) where HR
 - Print layouts come from `examples/actual_files/` (`NEW PLS.xlsx`, `NEW TO.xlsx`, `NEW PLS SB.xlsx`, `NEW TO SB.xlsx`): A4 portrait, logo header, up to 5 name rows, recommending and approving signatory blocks.
 - Mayor's Office forms: recommending = Department Head, approving = Municipal Mayor (or OIC/Acting). SB forms: recommending = SB Secretary, approving = Municipal Vice Mayor (or OIC/Acting).
 - Signatories change often (OIC, Acting). Staff can set an office default and override it per record.
-- Records are never permanently deleted. Archive only.
+- Records are never permanently deleted. Archive only. Exception: unused Blank issued forms of a past month can be deleted (US-18, user decision 2026-11-21).
 
 ## User Stories
 
@@ -131,6 +131,7 @@ Changed 2026-11-21: date and time formats, Mayor's TO prints the recommending si
 - [ ] A failed save (e.g. file open in Excel) shows an error and does not change the record.
 
 ### US-7: Issue a numbered blank form
+Changed 2026-11-21: a Mayor's Office blank leaves the Department Head line empty; it is picked when filling in (user decision before Phase 8, blanks are taken at random by any department).
 Changed 2026-11-21: after issuing, the preview (US-15) opens before the save dialog (user request after Phase 2).
 Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories fixed when filling (user decisions before Phase 2 plan).
 
@@ -139,14 +140,14 @@ Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories f
 **Accepts when:**
 - [ ] Staff choose form type and issuing office, then "Issue blank".
 - [ ] It takes the next number from the same counter as US-5 and saves a record with status **Blank issued**.
-- [ ] The printed .xlsx has the number and signatories filled and all other fields blank.
+- [ ] The printed .xlsx has the number and signatories filled and all other fields blank. On a Mayor's Office blank the recommending line is empty with the title "DEPARTMENT HEAD" under it.
 - [ ] Staff later open the Blank issued record, fill the details, and save. The number does not change and the status becomes **Filled**.
 - [ ] "Issue blank" asks for confirmation naming the form type and office and that it reserves the next number. Cancel reserves nothing.
 - [ ] The New record page lists Blank issued records with "Fill in" and "Print again".
 - [ ] Filling in uses the same rules as US-5 (required fields, 1 to 5 employees, purpose limit, overlap warning).
 
 **Rejects when:**
-- [ ] When filling in, form type, issuing office, number, and signatories cannot be changed. They stay as printed.
+- [ ] When filling in, form type, issuing office, number, and the printed signatories cannot be changed. A Mayor's Office blank requires choosing the active Department Head who signed (recommending role); Approved by stays as printed.
 - [ ] A Blank issued record does not appear in "who is out today" or office reports until it is filled.
 
 ### US-8: Edit a record
@@ -168,6 +169,7 @@ Changed 2026-11-21: people already on a record stay valid when edited, overlap w
 ### US-9: Archive and restore a record
 Changed 2026-11-21: Blank issued forms can be archived too (user decision before Phase 3 plan).
 Changed 2026-11-21: Restore warns on overlap (user decision in Phase 3 review).
+Changed 2026-11-21: unused blanks of a past month can be deleted (US-18, user decision before Phase 8).
 
 **As** HR staff, **I want** to archive a wrong or cancelled record, **so that** it leaves the active list without losing its number.
 
@@ -180,7 +182,7 @@ Changed 2026-11-21: Restore warns on overlap (user decision in Phase 3 review).
 
 **Rejects when:**
 - [ ] An archived record's number is never reused.
-- [ ] No permanent delete exists.
+- [ ] No permanent delete exists, except unused Blank issued forms of a past month (US-18).
 
 ### US-10: Browse, search, and filter records
 Changed 2026-11-21: the date range filter matches travel (inclusive) dates; reprint from the record (user decision before Phase 3 plan).
@@ -256,10 +258,52 @@ Changed 2026-11-21: the date range filter matches travel (inclusive) dates; repr
 - [ ] Closing the preview writes no file.
 - [ ] Text typed into a record shows as plain text in the preview and never runs as page code.
 
+### US-16: Print a stack of blank forms
+**As** HR staff, **I want** to print many numbered blank forms in one step, **so that** I can leave a stack on the desk for any employee to take.
+
+**Accepts when:**
+- [ ] Staff choose the stack (Mayor's Office or Sangguniang Bayan) and how many (1 to 50). The employee's office is not chosen, because any employee can take a form.
+- [ ] Signatories pre-fill from the office defaults (US-4) and staff can change them (OIC, Acting). Mayor's Office stack: Approved by only; the Department Head line is printed empty. SB stack: Recommending approval and Approved by.
+- [ ] Before anything is reserved, a confirmation names the form type, stack, count, the expected number range, and the chosen signatories. Cancel reserves nothing.
+- [ ] Confirming reserves consecutive numbers from the US-5 counter and saves one Blank issued record per number. The success message shows the real range issued.
+- [ ] The preview (US-15) shows the first form and how many the file holds. "Save as Excel" saves one .xlsx with one page per form, each on the official A4 layout.
+
+**Rejects when:**
+- [ ] A count below 1 or above 50 is refused with a message, and nothing is reserved.
+- [ ] A stack is not issued without its required signatories, and an archived signatory cannot be chosen.
+- [ ] Two stacks, or a stack and a new record, never get the same number.
+
+### US-17: Encode a returned form by its number
+**As** HR staff, **I want** to type the number printed on a returned form, **so that** I open the right blank and link it to the employee who used it.
+
+**Accepts when:**
+- [ ] The New record page has a "Number on the returned form" box. A Blank issued number opens Fill in (US-7) for that blank.
+- [ ] Filling in links the number to the employees chosen there, with their current office, designation, and status saved on the record.
+- [ ] The "Blank forms to fill" list stays available.
+
+**Rejects when:**
+- [ ] An unknown number shows "No blank form has this number. Check the number on the paper."
+- [ ] A number already filled shows "<number> is already encoded." with a link to open it.
+- [ ] An archived blank shows "<number> was voided."
+- [ ] Extra spaces around the typed number are ignored.
+
+### US-18: Delete unused blanks of a past month
+**As** HR staff, **I want** to delete the blank forms nobody used once their month is over, **so that** unused forms are not stored.
+
+**Accepts when:**
+- [ ] "Blank forms to fill" shows, for each past month that still has unused blanks, "Delete <n> unused blanks of <Month YYYY>".
+- [ ] A confirmation names the month, the count, and that it cannot be undone. Cancel deletes nothing.
+- [ ] Confirming permanently deletes those Blank issued records (active or archived) and shows "Deleted <n> unused blanks of <Month YYYY>".
+
+**Rejects when:**
+- [ ] Blanks of the current month cannot be deleted, so a deleted number can never be issued again.
+- [ ] Filled records, and blanks filled in the meantime, are never deleted.
+
 ## Critical workflows
 - CW-1: Issue and print a record: US-1 → US-3 → US-4 → US-5 → US-6
 - CW-2: Blank form lifecycle: US-1 → US-7 → US-8 → US-11
 - CW-3: Recover data: US-13 → US-14 → US-1 → US-10
+- CW-4: Blank stack lifecycle: US-16 → US-17 → US-11 → US-18
 
 ## Out of Scope
 - Multi-PC or LAN access: single PC was chosen.

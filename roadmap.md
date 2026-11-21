@@ -109,9 +109,24 @@ Picked up from Phase 3: active records = `archived_at IS NULL`, plus `status = '
 
 Conventions later phases inherit: every .xlsx export goes through `saveExport` (save dialog, write, `exported` map), so `records:openExport` opens it. Reports read `record_employees` snapshots, with the office saved on the record, and office filters include archived offices (`useOffices`). Exported cells are plain text or numbers, never formulas. E2E dates relative to today come from `localDay(offset)` in `tests/e2e/helpers.js`; login lands on Out today.
 
-### Phase 5 — Backup and restore NEXT
+### Phase 8 — Blank form stacks NEXT
 
-On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch.
+Reopens Phase 2: blank forms are printed in stacks and the Mayor's Office Department Head is picked when filling in (US-7 changed). Reopens Phase 3: US-9 allows deleting unused blanks of a past month (US-18).
+HR leaves a stack of numbered blanks on the desk; any employee takes one; HR encodes the returned paper by its number.
+Covers US-16, US-17, US-18. Changes US-7, US-9.
+
+- Issue 1 to 50 blanks in one step, one .xlsx with one page each, signatories checked before numbers are reserved.
+- Encode a returned form by typing its number.
+- Delete a past month's unused blanks.
+- Schema: `records.recommending_*` nullable (migration v3), since a Mayor's Office blank has no Department Head until filled.
+
+**Done when:** in the packaged app, a stack of each of the 4 kinds prints to one .xlsx with one A4 page per number (checked by eye in Excel, logo included), a Mayor's Office blank shows the empty DEPARTMENT HEAD line, a returned number opens Fill in and links the employees, and a past month's unused blanks are deleted while the current month's cannot be. Every US-16, US-17, US-18 and CW-4 condition passes, US-7 and US-9 still pass, and the full E2E suite passes.
+
+Deliberately not built, and why: linking a blank to an employee when printing, because forms are taken at random (user decision). Reusing a deleted number, because only past months can be deleted.
+
+### Phase 5 — Backup and restore LATER
+
+On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request).
 
 Covers US-13, US-14.
 
