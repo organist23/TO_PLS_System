@@ -14,7 +14,7 @@
 
 - Numbers only from `withCounter` (one `GET_LOCK` per counter); a stack's numbers are consecutive and assigned in one lock and one transaction.
 - The stack is the issuing office (Mayor's Office or SB). The employee's office comes from the employees chosen at Fill in.
-- Mayor's Office blank: `recommending_id/name/title` are NULL until filled; the form prints an empty name line and the title `DEPARTMENT HEAD`. SB blank: both signatories required at issue. New record (US-5) is unchanged: it still requires both.
+- Mayor's Office blank: `recommending_id/name/title` are NULL until filled; nothing is written to the recommending cells, so each template keeps the official paper's look (PLS: empty line over `DEPARTMENT HEAD`; TO: empty space). User decision 2026-11-21. SB blank: both signatories required at issue. New record (US-5) is unchanged: it still requires both.
 - Count: whole number 1 to 50, else `errors.count = 'Enter a number from 1 to 50'`.
 - A number is unique only with its form type (PLS and TO keep separate counters), so lookup is by form type + number. The typed number is compared with spaces removed and `sb` in any case.
 - Delete: only `status = 'blank'` rows (active or archived) of a period before the current local month. Current or future period → `{ ok: false, error: 'Only blanks of a past month can be deleted.' }`.
@@ -43,10 +43,10 @@
 **Files:** Modify `src/main/print.js`, `tests/unit/print.test.js`.
 
 **Interfaces:**
-- `fillWorkbook(record)`: when `recommending_name` is NULL, the recommending name cell is empty and the title cell is `DEPARTMENT HEAD` (Mayor templates only reach this).
+- `fillWorkbook(record)`: when `recommending_name` is NULL, the recommending cells are not written (PLS Mayor keeps `DEPARTMENT HEAD`, TO Mayor stays empty).
 - `buildStackWorkbook(records)` → `Buffer`: one sheet per record in the given order, sheet name = the record's number (`SB 2026-11-5` allowed), each a copy of that record's filled template sheet (merges, widths, heights, print setup, logo). Every sheet `views[0].tabSelected = true` so Excel opens them grouped and a plain Print prints all. `buildWorkbook(record)` = `buildStackWorkbook([record])`.
 - [ ] Spike first: build 3-record stacks for all 4 templates into `scratchpad`, open each in Excel, Print Preview shows 3 A4 pages with logo, numbers and an empty Department Head line on Mayor blanks matching `examples/actual_files`. If grouped printing or the logo copy cannot be made to work, stop and report.
-- [ ] Tests: a 3-record stack has 3 sheets named by number, each sheet's number cell holds its own number, each has 1 image and the template's print setup (A4, fit to 1 page), every sheet `tabSelected`; a Mayor PLS and Mayor TO blank with NULL recommending have an empty name cell and `DEPARTMENT HEAD` title; `buildWorkbook` output still matches the existing per-template tests.
+- [ ] Tests: a 3-record stack has 3 sheets named by number, each sheet's number cell holds its own number, each has 1 image and the template's print setup (A4, fit to 1 page), every sheet `tabSelected`; a Mayor PLS blank with NULL recommending has an empty name cell and `DEPARTMENT HEAD` title, a Mayor TO blank has both empty; `buildWorkbook` output still matches the existing per-template tests.
 - [ ] Mutation: drop `tabSelected` on sheets after the first → red. Commit `feat: stack workbook, empty Department Head line`.
 
 ### Task 2: Migration v3, issue N, Fill in picks the Department Head
