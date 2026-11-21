@@ -62,3 +62,17 @@ export const thisMonth = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
+
+// OS boundary fakes: the save dialog returns filePath (or cancels), shell.openPath records what it was asked to open.
+export const mockSaveDialog = (app, filePath) =>
+  app.evaluate(({ dialog }, f) => {
+    dialog.showSaveDialog = async () => (f ? { canceled: false, filePath: f } : { canceled: true });
+  }, filePath ?? null);
+
+export const mockOpenPath = (app) =>
+  app.evaluate(({ shell }) => {
+    globalThis.__opened = [];
+    shell.openPath = async (f) => { globalThis.__opened.push(f); return ''; };
+  });
+
+export const openedPaths = (app) => app.evaluate(() => globalThis.__opened);

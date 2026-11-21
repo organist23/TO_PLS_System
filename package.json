@@ -15,6 +15,7 @@
   "type": "module",
   "productName": "PLS-TO Records System",
   "dependencies": {
+    "exceljs": "^4.4.0",
     "mysql2": "^3.24.6"
   },
   "devDependencies": {

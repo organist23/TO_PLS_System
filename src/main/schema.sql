@@ -1,4 +1,4 @@
--- shortcut: CREATE IF NOT EXISTS only, no versioning. The first phase that alters a table adds a schema_version table.
+-- v1 snapshot (Phases 0-1). Later changes live in db.js MIGRATIONS; never edit these tables here.
 CREATE TABLE IF NOT EXISTS users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) NOT NULL UNIQUE,
