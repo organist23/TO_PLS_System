@@ -99,7 +99,10 @@ test.describe('US-15 Preview a form before saving it', () => {
     await button('Issue blank form').click();
     await page.getByRole('dialog').getByRole('button', { name: 'Issue blank' }).click();
     await expect(preview().getByRole('heading')).toHaveText(`Preview PLS ${thisMonth()}-1`);
-    await expect(preview().getByText('JUAN P. SANTOS', { exact: true })).toBeVisible();
+    // US-7 changed 2026-11-21: a Mayor's Office blank leaves the Department Head to whoever signs the paper.
+    await expect(preview().getByText('VINCENT E. HERMOSO', { exact: true })).toBeVisible();
+    await expect(preview().getByText('DEPARTMENT HEAD', { exact: true })).toBeVisible();
+    await expect(preview().getByText('JUAN P. SANTOS', { exact: true })).toHaveCount(0);
     await expect(preview().getByText('Ana Cruz')).toHaveCount(0);
     await expect(preview().getByText(/^DATE:_+$/)).toBeVisible();
   });

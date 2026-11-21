@@ -5,6 +5,9 @@ import { usePrint } from '../components/PrintFlow.jsx';
 import { ISSUING_OFFICES } from '../../main/signatories.js';
 
 const MAX_EMPLOYEES = 5;
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const monthLabel = (period) => `${MONTHS[Number(period.slice(5)) - 1]} ${period.slice(0, 4)}`;
+const DEPT_HEAD_ON_PAPER = 'Department Head (signs on the paper)';
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -49,12 +52,18 @@ export default function NewRecord({ params = {}, go }) {
   const [gone, setGone] = useState(''); // the record params.id names cannot be edited or filled
   const [issueOpen, setIssueOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  const [issueCount, setIssueCount] = useState('1');
+  const [estimate, setEstimate] = useState(null); // numbers the stack would get: { first, last } | 'loading' | { error }
+  const [lookup, setLookup] = useState({ formType: 'PLS', number: '', pending: false, error: '', encodedId: null });
+  const [months, setMonths] = useState([]); // past months with unused blanks (US-18)
+  const [deleting, setDeleting] = useState(null); // { period, count, pending, error }
   const busy = useRef(false);
 
   const loadBlanks = useCallback(async () => {
     setBlanks((b) => ({ ...b, status: 'loading' }));
-    const res = await window.api.invoke('records:listBlank');
+    const [res, unused] = await Promise.all([window.api.invoke('records:listBlank'), window.api.invoke('records:unusedBlanks')]);
     setBlanks(res.ok ? { status: 'ready', rows: res.data } : { status: 'error', rows: [], error: res.error });
+    setMonths(unused.ok ? unused.data : []);
   }, []);
   useEffect(() => void loadBlanks(), [loadBlanks]);
 
@@ -86,7 +95,7 @@ export default function NewRecord({ params = {}, go }) {
           recommendingName: r.recommending_name, recommendingTitle: r.recommending_title,
           approvingName: r.approving_name, approvingTitle: r.approving_title,
         });
-        setForm((f) => ({ ...f, ...blankDetails(), formType: r.form_type, issuingOffice: r.issuing_office }));
+        setForm((f) => ({ ...f, ...blankDetails(), formType: r.form_type, issuingOffice: r.issuing_office, recommendingId: '' }));
       } else {
         setGone(!rec.ok ? rec.error : params.mode === 'fill' ? 'This blank form is no longer available.' : 'This record can no longer be edited.');
       }
@@ -96,11 +105,12 @@ export default function NewRecord({ params = {}, go }) {
   useEffect(() => void load(), [load]);
 
   // Signatories follow the issuing office's defaults whenever the office changes or the lists (re)load.
+  // An edit keeps the record's signatories; a blank being filled has its own (and no default Department Head).
   useEffect(() => {
-    if (lists.status !== 'ready' || params.mode === 'edit') return; // an edit keeps the record's signatories
+    if (lists.status !== 'ready' || params.mode === 'edit' || filling) return;
     const d = lists.defaults[form.issuingOffice];
     setForm((f) => ({ ...f, recommendingId: d.recommending ?? '', approvingId: d.approving ?? '' }));
-  }, [lists, form.issuingOffice]);
+  }, [lists, form.issuingOffice, filling]);
 
   if (lists.status === 'loading') return <p className="text-sm text-slate-600">Loading…</p>;
   if (lists.status === 'error') {
@@ -143,7 +153,7 @@ export default function NewRecord({ params = {}, go }) {
     resetPrinting();
     const withSigners = { ...form, recommendingId: Number(form.recommendingId) || null, approvingId: Number(form.approvingId) || null, confirmOverlap };
     const res = filling
-      ? await window.api.invoke('records:fillBlank', { ...form, id: filling.id, confirmOverlap })
+      ? await window.api.invoke('records:fillBlank', { ...withSigners, id: filling.id })
       : editing
         ? await window.api.invoke('records:update', { ...withSigners, id: editing.id })
         : await window.api.invoke('records:create', withSigners);
@@ -163,6 +173,14 @@ export default function NewRecord({ params = {}, go }) {
     }
   }
 
+  // The confirmation shows the numbers the stack would get; the server assigns the real ones (US-16).
+  async function openIssue() {
+    setIssueOpen(true);
+    setEstimate('loading');
+    const res = await window.api.invoke('records:nextNumbers', { formType: form.formType, issuingOffice: form.issuingOffice, count: issueCount });
+    setEstimate(res.ok ? res.data : { error: res.error });
+  }
+
   async function issueBlank() {
     setIssuing(true);
     setErrors({});
@@ -174,20 +192,48 @@ export default function NewRecord({ params = {}, go }) {
       issuingOffice: form.issuingOffice,
       recommendingId: Number(form.recommendingId) || null,
       approvingId: Number(form.approvingId) || null,
+      count: issueCount,
     });
     setIssuing(false);
     setIssueOpen(false);
     if (!res.ok) return res.errors ? setErrors(res.errors) : setFormError(res.error);
-    setNotice(`Issued blank ${res.data.formType} ${res.data.number}`);
-    setSaved(res.data);
+    const { formType, ids, numbers } = res.data;
+    setNotice(ids.length === 1
+      ? `Issued blank ${formType} ${numbers[0]}`
+      : `Issued ${ids.length} blank ${formType}: ${numbers[0]} to ${numbers[numbers.length - 1]}`);
+    const rec = { id: ids[0], number: numbers[0], formType, ids };
+    setSaved(rec);
     loadBlanks();
-    print(res.data);
+    print(rec);
+  }
+
+  // US-17: the number printed on a returned form opens its Fill in.
+  async function findReturned(e) {
+    e.preventDefault();
+    setLookup((l) => ({ ...l, pending: true, error: '', encodedId: null }));
+    const res = await window.api.invoke('records:findBlank', { formType: lookup.formType, number: lookup.number });
+    const done = { pending: false, error: '', encodedId: null };
+    if (!res.ok) return setLookup((l) => ({ ...l, ...done, error: res.error }));
+    const b = res.data;
+    if (b.status === 'filled') return setLookup((l) => ({ ...l, ...done, error: `${b.number} is already encoded.`, encodedId: b.id }));
+    if (b.archived) return setLookup((l) => ({ ...l, ...done, error: `${b.number} was voided.` }));
+    setLookup((l) => ({ ...l, ...done, number: '' }));
+    startFill(b);
+  }
+
+  async function deleteMonth() {
+    setDeleting((d) => ({ ...d, pending: true, error: '' }));
+    const res = await window.api.invoke('records:deleteUnusedBlanks', { period: deleting.period });
+    if (!res.ok) return setDeleting((d) => ({ ...d, pending: false, error: res.error }));
+    setDeleting(null);
+    setNotice(`Deleted ${res.data.deleted} unused blanks of ${monthLabel(res.data.period)}`);
+    loadBlanks();
   }
 
   function startFill(b) {
     setFilling(b);
     resetPrinting();
-    setForm((f) => ({ ...f, ...blankDetails(), formType: b.formType, issuingOffice: b.issuingOffice }));
+    setForm((f) => ({ ...f, ...blankDetails(), formType: b.formType, issuingOffice: b.issuingOffice, recommendingId: '' }));
     setErrors({});
     setFormError('');
     setNotice('');
@@ -217,6 +263,13 @@ export default function NewRecord({ params = {}, go }) {
       ...options,
     ];
   };
+
+  const signerName = (id) => {
+    const s = lists.signatories.find((x) => x.id === Number(id));
+    return s ? `${s.name} — ${s.title}` : 'Not chosen';
+  };
+  const count = Number(issueCount);
+  const mayorStack = form.issuingOffice === 'MAYOR';
 
   return (
     <section className="space-y-6">
@@ -294,12 +347,18 @@ export default function NewRecord({ params = {}, go }) {
         <Field label="Purpose" id="rec-purpose" error={errors.purpose}><textarea rows={3} {...field('purpose')} /></Field>
 
         {filling ? (
-          <dl className="grid gap-4 text-sm sm:grid-cols-2">
-            <div><dt className="font-medium text-slate-700">Recommending approval (as printed)</dt>
-              <dd className="mt-1 text-slate-900">{filling.recommendingName} — {filling.recommendingTitle}</dd></div>
-            <div><dt className="font-medium text-slate-700">Approved by (as printed)</dt>
-              <dd className="mt-1 text-slate-900">{filling.approvingName} — {filling.approvingTitle}</dd></div>
-          </dl>
+          <div className="grid gap-4 text-sm sm:grid-cols-2">
+            {filling.recommendingName == null ? (
+              <Field label="Recommending approval (Department Head who signed)" id="rec-recommendingId" error={errors.recommendingId}>
+                <select {...field('recommendingId')}><option value="">Choose the Department Head</option>{signatoryOptions('recommending')}</select>
+              </Field>
+            ) : (
+              <div><p className="font-medium text-slate-700">Recommending approval (as printed)</p>
+                <p className="mt-1 text-slate-900">{filling.recommendingName} — {filling.recommendingTitle}</p></div>
+            )}
+            <div><p className="font-medium text-slate-700">Approved by (as printed)</p>
+              <p className="mt-1 text-slate-900">{filling.approvingName} — {filling.approvingTitle}</p></div>
+          </div>
         ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Recommending approval" id="rec-recommendingId" error={errors.recommendingId}>
@@ -322,14 +381,62 @@ export default function NewRecord({ params = {}, go }) {
           {filling || editing ? (
             <button type="button" className={btn.secondary} onClick={editing ? () => go('records', { openId: editing.id }) : cancelFill}>Cancel</button>
           ) : (
-            <button type="button" className={btn.secondary} onClick={() => setIssueOpen(true)}>Issue blank form</button>
+            <div className="flex items-start gap-3">
+              <label htmlFor="rec-count" className="pt-2 text-sm font-medium text-slate-700">How many</label>
+              <div className="w-24">
+                <input id="rec-count" type="number" min="1" max="50" className={`${inputClass} mt-0`}
+                  value={issueCount} onChange={(e) => setIssueCount(e.target.value)}
+                  aria-invalid={!!errors.count} aria-describedby={errors.count ? 'rec-count-error' : undefined} />
+                {errors.count && <p id="rec-count-error" className="mt-1 text-sm text-red-700">{errors.count}</p>}
+              </div>
+              <button type="button" className={btn.secondary} onClick={openIssue}>Issue blank form</button>
+            </div>
           )}
         </div>
       </form>
 
       {!editing && !params.mode && (
+      <form onSubmit={findReturned} aria-labelledby="encode-heading" className="space-y-3 rounded-md border border-slate-200 bg-white p-6">
+        <h2 id="encode-heading" className="text-base font-semibold text-slate-900">Encode a returned form</h2>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-28">
+            <Field label="Form" id="enc-form">
+              <select id="enc-form" className={inputClass} value={lookup.formType} onChange={(e) => setLookup({ ...lookup, formType: e.target.value })}>
+                <option value="PLS">PLS</option>
+                <option value="TO">TO</option>
+              </select>
+            </Field>
+          </div>
+          <div className="w-64">
+            <Field label="Number on the returned form" id="enc-number">
+              <input id="enc-number" className={inputClass} value={lookup.number} placeholder="2026-11-25"
+                onChange={(e) => setLookup({ ...lookup, number: e.target.value, error: '', encodedId: null })}
+                aria-invalid={!!lookup.error} aria-describedby={lookup.error ? 'enc-number-error' : undefined} />
+            </Field>
+          </div>
+          <button type="submit" className={btn.secondary} disabled={lookup.pending || !lookup.number.trim()}>
+            {lookup.pending ? 'Finding…' : 'Find'}
+          </button>
+        </div>
+        {lookup.error && (
+          <p id="enc-number-error" role="alert" className="text-sm text-red-700">
+            {lookup.error}{' '}
+            {lookup.encodedId && <button type="button" className={btn.link} onClick={() => go('records', { openId: lookup.encodedId })}>Open</button>}
+          </p>
+        )}
+      </form>
+      )}
+
+      {!editing && !params.mode && (
       <section aria-labelledby="blanks-heading" className="space-y-3">
         <h2 id="blanks-heading" className="text-base font-semibold text-slate-900">Blank forms to fill</h2>
+        {months.map((m) => (
+          <div key={m.period}>
+            <button type="button" className={btn.danger} onClick={() => setDeleting({ ...m, pending: false, error: '' })}>
+              Delete {m.count} unused blanks of {monthLabel(m.period)}
+            </button>
+          </div>
+        ))}
         {blanks.status === 'loading' && <p className="text-sm text-slate-600">Loading…</p>}
         {blanks.status === 'error' && (
           <Banner action={<button className={btn.link} onClick={loadBlanks}>Retry</button>}>{blanks.error}</Banner>
@@ -371,13 +478,37 @@ export default function NewRecord({ params = {}, go }) {
 
       <ConfirmDialog
         open={issueOpen}
-        title={`Issue a blank ${form.formType} for ${ISSUING_OFFICES[form.issuingOffice]}?`}
-        message="This reserves the next number."
-        confirmLabel="Issue blank"
+        title={count > 1
+          ? `Issue ${count} blank ${form.formType} for ${ISSUING_OFFICES[form.issuingOffice]}?`
+          : `Issue a blank ${form.formType} for ${ISSUING_OFFICES[form.issuingOffice]}?`}
+        message={
+          <div className="space-y-1">
+            <p>
+              {estimate === 'loading' ? 'Checking numbers…'
+                : estimate?.error ? estimate.error
+                  : count > 1 ? `Numbers: ${estimate?.first} to ${estimate?.last}` : `Number: ${estimate?.first}`}
+            </p>
+            <p>Recommending approval: {mayorStack ? DEPT_HEAD_ON_PAPER : signerName(form.recommendingId)}</p>
+            <p>Approved by: {signerName(form.approvingId)}</p>
+            <p>This reserves {count > 1 ? `${count} numbers` : 'the next number'}.</p>
+          </div>
+        }
+        confirmLabel={count > 1 ? `Issue ${count} blanks` : 'Issue blank'}
         confirmClass={btn.primary}
         pending={issuing}
         onConfirm={issueBlank}
         onCancel={() => setIssueOpen(false)}
+      />
+
+      <ConfirmDialog
+        open={!!deleting}
+        title={deleting ? `Delete ${deleting.count} unused blanks of ${monthLabel(deleting.period)}?` : ''}
+        message="Their numbers were never used. This cannot be undone."
+        confirmLabel="Delete"
+        error={deleting?.error}
+        pending={deleting?.pending}
+        onConfirm={deleteMonth}
+        onCancel={() => setDeleting(null)}
       />
 
       <ConfirmDialog
