@@ -31,7 +31,7 @@ export async function loginAsChangedAdmin(page) {
   await page.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
   await page.getByLabel('Confirm new password').fill(NEW_PASSWORD);
   await page.getByRole('button', { name: 'Save password' }).click();
-  await page.getByRole('heading', { name: 'Employees' }).waitFor();
+  await page.getByRole('heading', { name: 'Out today' }).waitFor(); // the dashboard opens after login (US-1)
 }
 
 export const invoke = (page, channel, payload) => page.evaluate(([c, p]) => window.api.invoke(c, p), [channel, payload]);
@@ -94,3 +94,14 @@ export const seedRecord = (page, seed, over = {}) =>
 
 // Records page: the Number column of the list, in order (retries until it matches).
 export const listNumbers = (page) => page.locator('table tbody tr td:first-child');
+
+// Local YYYY-MM-DD of the test machine's clock, offset by whole days (hand-derived, not the app's code).
+export const localDay = (offset = 0) => {
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+// Text of each body row of a table, cells joined by " | ".
+export const tableRows = (table) =>
+  table.locator('tbody tr').evaluateAll((trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent).join(' | ')));

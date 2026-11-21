@@ -6,20 +6,24 @@ import Offices from './pages/Offices.jsx';
 import Signatories from './pages/Signatories.jsx';
 import NewRecord from './pages/NewRecord.jsx';
 import Records from './pages/Records.jsx';
+import OutToday from './pages/OutToday.jsx';
+import Reports from './pages/Reports.jsx';
 import DbError from './pages/DbError.jsx';
 
 const dbError = location.hash.startsWith('#db-error=') ? decodeURIComponent(location.hash.slice('#db-error='.length)) : null;
 const PAGES = {
+  outToday: ['Out today', OutToday], // first page after login (US-1 dashboard)
   employees: ['Employees', Employees],
   offices: ['Offices', Offices],
   signatories: ['Signatories', Signatories],
   newRecord: ['New record', NewRecord],
   records: ['Records', Records],
+  reports: ['Reports', Reports],
 };
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = still checking the session
-  const [{ page, params, seq }, setNav] = useState({ page: 'employees', params: {}, seq: 0 });
+  const [{ page, params, seq }, setNav] = useState({ page: 'outToday', params: {}, seq: 0 });
   // Every navigation remounts the page, so a nav click always shows the page fresh (e.g. Records list, not a detail).
   const go = (p, prm = {}) => setNav((n) => ({ page: p, params: prm, seq: n.seq + 1 }));
 
@@ -33,7 +37,7 @@ export default function App() {
   const logout = async () => {
     await window.api.invoke('auth:logout');
     setUser(null);
-    go('employees');
+    go('outToday');
   };
 
   if (!user) return <Login onLogin={setUser} />;
