@@ -3,7 +3,7 @@ import { freshTestDb, testConfig } from '../helpers/testDb.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee } from '../../src/main/directory.js';
 import { createSignatory, archiveSignatory, updateSignatory } from '../../src/main/signatories.js';
-import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord } from '../../src/main/records.js';
+import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord } from '../../src/main/records.js';
 
 let pool, ids;
 const NOV = new Date(2026, 10, 20, 9, 0);
@@ -341,4 +341,104 @@ test('getRecord returns the record with employees in position order', async () =
   ]);
   expect(await getRecord(pool, 99999)).toEqual({ ok: false, error: 'Record not found' });
   expect(await getRecord(pool, 'x')).toEqual({ ok: false, error: 'Record not found' });
+});
+
+const edit = (id, over = {}) => updateRecord(pool, { id, ...details(over), recommendingId: ids.rec, approvingId: ids.appr, ...over });
+const row = async (id) => (await pool.query('SELECT * FROM records WHERE id = ?', [id]))[0][0];
+const savedNames = async (id) => (await pool.query('SELECT full_name FROM record_employees WHERE record_id = ? ORDER BY position', [id]))[0].map((r) => r.full_name);
+
+test('updateRecord changes details and employees; number unchanged', async () => {
+  const r = (await create({})).data;
+  const res = await edit(r.id, {
+    destination: 'Manila', inclusiveFrom: '2026-11-24', inclusiveTo: '2026-11-25', departureAt: '2026-11-24T06:30',
+    returnAt: '2026-11-25T18:00', purpose: 'Training', vehicle: 'Service van', dateFiled: '2026-11-21', employeeIds: [ids.emps[1], ids.emps[0]],
+  });
+  expect(res).toEqual({ ok: true, data: { id: r.id, number: '2026-11-1', formType: 'PLS' } });
+  expect(await row(r.id)).toMatchObject({
+    number: '2026-11-1', destination: 'Manila', inclusive_from: '2026-11-24', inclusive_to: '2026-11-25', departure_at: '2026-11-24 06:30:00',
+    return_at: '2026-11-25 18:00:00', purpose: 'Training', vehicle: 'Service van', date_filed: '2026-11-21',
+  });
+  expect(await savedNames(r.id)).toEqual(['Emp 2', 'Emp 1']);
+});
+
+test('updateRecord ignores number, form type, office and status in the payload', async () => {
+  const r = (await create({})).data;
+  expect((await edit(r.id, { formType: 'TO', issuingOffice: 'SB', number: '9999', status: 'blank', seq: 9, period: '2020-01' })).ok).toBe(true);
+  expect(await row(r.id)).toMatchObject({ number: '2026-11-1', form_type: 'PLS', issuing_office: 'MAYOR', status: 'filled', seq: 1, period: '2026-11' });
+});
+
+test('updateRecord keeps archived-since employees and signatories with their saved details', async () => {
+  const r = (await create({ employeeIds: [ids.emps[0]] })).data;
+  await updateEmployee(pool, { id: ids.emps[0], fullName: 'Renamed', designation: 'X', employmentStatus: 'Casual', officeId: ids.officeId });
+  await archiveEmployee(pool, { id: ids.emps[0] });
+  await updateSignatory(pool, { id: ids.appr, name: 'NEW MAYOR NAME', title: 'MUNICIPAL MAYOR', role: 'approving' });
+  await archiveSignatory(pool, { id: ids.appr });
+  expect((await edit(r.id, { employeeIds: [ids.emps[0], ids.emps[1]], destination: 'Manila' })).ok).toBe(true);
+  const [emps] = await pool.query('SELECT full_name, designation, employment_status FROM record_employees WHERE record_id = ? ORDER BY position', [r.id]);
+  expect(emps).toEqual([
+    { full_name: 'Emp 1', designation: 'Desig 1', employment_status: 'Permanent' },
+    { full_name: 'Emp 2', designation: 'Desig 2', employment_status: 'Permanent' },
+  ]);
+  expect(await row(r.id)).toMatchObject({ approving_id: ids.appr, approving_name: 'MAYOR', destination: 'Manila' });
+});
+
+test('updateRecord: newly added people and signatories must be active and take current details', async () => {
+  const r = (await create({})).data;
+  await archiveEmployee(pool, { id: ids.emps[2] });
+  expect((await edit(r.id, { employeeIds: [ids.emps[0], ids.emps[2]] })).errors).toEqual({ employees: 'Choose active employees' });
+  const gone = (await createSignatory(pool, { name: 'OLD', title: 'OIC', role: 'approving' })).data.id;
+  await archiveSignatory(pool, { id: gone });
+  expect((await edit(r.id, { approvingId: gone, recommendingId: ids.appr })).errors).toEqual({
+    approvingId: 'Choose an active approving signatory', recommendingId: 'Choose an active recommending signatory',
+  });
+  const acting = (await createSignatory(pool, { name: 'ACTING', title: 'ACTING MAYOR', role: 'approving' })).data.id;
+  expect((await edit(r.id, { approvingId: acting })).ok).toBe(true);
+  expect(await row(r.id)).toMatchObject({ approving_id: acting, approving_name: 'ACTING', approving_title: 'ACTING MAYOR', destination: 'Provincial Capitol' });
+  expect(await savedNames(r.id)).toEqual(['Emp 1']);
+});
+
+test('updateRecord uses the US-5 validation', async () => {
+  const r = (await create({})).data;
+  expect((await edit(r.id, { destination: '', purpose: 'a'.repeat(361), departureAt: '2026-11-20T08:00', returnAt: '2026-11-20T07:00', employeeIds: [] })).errors).toEqual({
+    destination: 'Required', purpose: 'At most 360 characters', returnAt: 'Return is before departure', employees: 'Add at least one employee',
+  });
+  expect(await row(r.id)).toMatchObject({ destination: 'Provincial Capitol' });
+});
+
+test('updateRecord overlap ignores the record itself and warns for others', async () => {
+  const r = (await create({ inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22' })).data;
+  expect((await edit(r.id, { inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-23' })).ok).toBe(true);
+  await create({ employeeIds: [ids.emps[1]], inclusiveFrom: '2026-11-25', inclusiveTo: '2026-11-25' });
+  const res = await edit(r.id, { employeeIds: [ids.emps[0], ids.emps[1]], inclusiveFrom: '2026-11-25', inclusiveTo: '2026-11-26' });
+  expect(res.error).toBe('Overlapping records');
+  expect(res.overlaps.map((o) => `${o.employeeName} ${o.number}`)).toEqual(['Emp 2 2026-11-2']);
+  expect(await savedNames(r.id)).toEqual(['Emp 1']);
+  expect((await edit(r.id, { employeeIds: [ids.emps[0], ids.emps[1]], inclusiveFrom: '2026-11-25', inclusiveTo: '2026-11-26', confirmOverlap: true })).ok).toBe(true);
+  expect(await savedNames(r.id)).toEqual(['Emp 1', 'Emp 2']);
+});
+
+test('updateRecord refuses archived, blank and missing records', async () => {
+  const refused = { ok: false, error: 'This record can no longer be edited.' };
+  const r = (await create({})).data;
+  await archiveRecord(pool, { id: r.id });
+  expect(await edit(r.id, { destination: 'Manila' })).toEqual(refused);
+  expect((await row(r.id)).destination).toBe('Provincial Capitol');
+  expect(await edit((await blank()).data.id)).toEqual(refused);
+  expect(await edit(99999)).toEqual(refused);
+});
+
+test('archive and restore; archived numbers are never reused; blanks can be archived', async () => {
+  const r = (await create({})).data;
+  expect(await archiveRecord(pool, { id: r.id })).toEqual({ ok: true, data: { id: r.id, number: '2026-11-1' } });
+  expect(await numbers({})).toEqual([]);
+  expect(await numbers({ status: 'archived' })).toEqual(['2026-11-1']);
+  expect(await numberOf({ employeeIds: [ids.emps[1]] })).toBe('2026-11-2');
+  expect(await restoreRecord(pool, { id: r.id })).toEqual({ ok: true, data: { id: r.id, number: '2026-11-1' } });
+  expect(await numbers({})).toEqual(['2026-11-2', '2026-11-1']);
+  const b = (await blank()).data;
+  expect((await archiveRecord(pool, { id: b.id })).ok).toBe(true);
+  expect(await numbers({ status: 'archived' })).toEqual(['2026-11-3']);
+  expect((await blank()).data.number).toBe('2026-11-4');
+  expect(await archiveRecord(pool, { id: 99999 })).toEqual({ ok: false, error: 'Record not found' });
+  expect(await restoreRecord(pool, { id: 99999 })).toEqual({ ok: false, error: 'Record not found' });
 });

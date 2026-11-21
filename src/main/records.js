@@ -29,7 +29,8 @@ async function validateHeader(conn, input, errors) {
 }
 
 // Everything staff write on the form: dates, employees, destination, purpose.
-async function validateDetails(conn, input, errors) {
+// keep: employee_id -> saved snapshot. Those people stay valid (even if archived since) and keep their saved details.
+async function validateDetails(conn, input, errors, keep = new Map()) {
   if (!isDate(input.dateFiled)) errors.dateFiled = 'Required';
   for (const f of ['destination', 'purpose']) if (!text(input[f])) errors[f] = 'Required';
   if (!errors.purpose && text(input.purpose).length > MAX_PURPOSE) errors.purpose = `At most ${MAX_PURPOSE} characters`;
@@ -49,12 +50,15 @@ async function validateDetails(conn, input, errors) {
   else if (ids.length > 5) errors.employees = 'At most 5 employees';
   else if (new Set(ids).size !== ids.length) errors.employees = 'Remove duplicate employees';
   else {
-    const [rows] = await conn.query(
-      'SELECT id, office_id, full_name, designation, employment_status FROM employees WHERE id IN (?) AND archived_at IS NULL',
-      [ids],
-    );
-    if (rows.length !== ids.length) errors.employees = 'Choose active employees';
-    else return ids.map((id) => rows.find((r) => r.id === id));
+    const fresh = ids.filter((id) => !keep.has(id));
+    const [rows] = fresh.length
+      ? await conn.query(
+          'SELECT id, office_id, full_name, designation, employment_status FROM employees WHERE id IN (?) AND archived_at IS NULL',
+          [fresh],
+        )
+      : [[]];
+    if (rows.length !== fresh.length) errors.employees = 'Choose active employees';
+    else return ids.map((id) => keep.get(id) ?? rows.find((r) => r.id === id));
   }
   return [];
 }
@@ -70,17 +74,17 @@ const insertEmployees = (conn, recordId, employees) =>
     [employees.map((e, i) => [recordId, i + 1, e.id, e.office_id, e.full_name, e.designation, e.employment_status])],
   );
 
-async function findOverlaps(conn, employees, from, to) {
+async function findOverlaps(conn, employees, from, to, excludeId = 0) {
   const [rows] = await conn.query(
     `SELECT e.full_name AS employeeName, r.form_type AS formType, r.number,
             r.inclusive_from AS inclusiveFrom, r.inclusive_to AS inclusiveTo
        FROM record_employees re
        JOIN records r ON r.id = re.record_id
        JOIN employees e ON e.id = re.employee_id
-      WHERE re.employee_id IN (?) AND r.archived_at IS NULL
+      WHERE re.employee_id IN (?) AND r.archived_at IS NULL AND r.id <> ?
         AND r.inclusive_from <= ? AND r.inclusive_to >= ?
       ORDER BY e.full_name, r.number`,
-    [employees.map((e) => e.id), to, from],
+    [employees.map((e) => e.id), excludeId, to, from],
   );
   return rows;
 }
@@ -287,3 +291,65 @@ export async function getRecord(pool, id) {
   );
   return { ok: true, data: { ...record, employees } };
 }
+
+const LOCKED = { ok: false, error: 'This record can no longer be edited.' };
+
+// Edits a filled, active record. Number, form type, issuing office and status never change.
+export function updateRecord(pool, input) {
+  return withConnection(pool, async (conn) => {
+    const editable = "SELECT * FROM records WHERE id = ? AND status = 'filled' AND archived_at IS NULL";
+    const [[rec]] = await conn.query(editable, [Number(input.id) || 0]);
+    if (!rec) return LOCKED;
+    const [saved] = await conn.query(
+      'SELECT employee_id AS id, office_id, full_name, designation, employment_status FROM record_employees WHERE record_id = ?',
+      [rec.id],
+    );
+    const errors = {};
+    // The saved signatory stays as saved (even if archived since); a different one must be active now.
+    const signer = async (role) => {
+      if (Number(input[`${role}Id`]) === rec[`${role}_id`]) return { id: rec[`${role}_id`], name: rec[`${role}_name`], title: rec[`${role}_title`] };
+      const s = await activeSignatory(conn, input[`${role}Id`], role);
+      if (!s) errors[`${role}Id`] = `Choose an active ${role} signatory`;
+      return s;
+    };
+    const recommending = await signer('recommending');
+    const approving = await signer('approving');
+    const employees = await validateDetails(conn, input, errors, new Map(saved.map((e) => [e.id, e])));
+    if (Object.keys(errors).length) return fieldErrors(errors);
+    if (input.confirmOverlap !== true) {
+      const overlaps = await findOverlaps(conn, employees, input.inclusiveFrom, input.inclusiveTo, rec.id);
+      if (overlaps.length) return { ok: false, error: 'Overlapping records', overlaps };
+    }
+    await conn.beginTransaction();
+    try {
+      const [[still]] = await conn.query(`${editable} FOR UPDATE`, [rec.id]);
+      if (!still) {
+        await conn.rollback();
+        return LOCKED; // archived in the meantime
+      }
+      await conn.query(
+        `UPDATE records SET date_filed = ?, destination = ?, vehicle = ?, inclusive_from = ?, inclusive_to = ?,
+           departure_at = ?, return_at = ?, purpose = ?,
+           recommending_id = ?, recommending_name = ?, recommending_title = ?, approving_id = ?, approving_name = ?, approving_title = ?
+         WHERE id = ?`,
+        [...detailValues(input), recommending.id, recommending.name, recommending.title, approving.id, approving.name, approving.title, rec.id],
+      );
+      await conn.query('DELETE FROM record_employees WHERE record_id = ?', [rec.id]);
+      await insertEmployees(conn, rec.id, employees);
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    }
+    return { ok: true, data: { id: rec.id, number: rec.number, formType: rec.form_type } };
+  });
+}
+
+async function setArchived(pool, id, archived) {
+  const [[rec]] = await pool.query('SELECT id, number FROM records WHERE id = ?', [Number(id) || 0]);
+  if (!rec) return { ok: false, error: 'Record not found' };
+  await pool.query(`UPDATE records SET archived_at = ${archived ? 'COALESCE(archived_at, NOW())' : 'NULL'} WHERE id = ?`, [rec.id]);
+  return { ok: true, data: rec };
+}
+export const archiveRecord = (pool, { id }) => setArchived(pool, id, true);
+export const restoreRecord = (pool, { id }) => setArchived(pool, id, false);
