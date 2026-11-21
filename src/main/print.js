@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ExcelJS from 'exceljs';
+import { getRecord } from './records.js';
 
 const templatesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'templates');
 
@@ -51,14 +52,9 @@ export function wrapPurpose(text) {
 }
 
 export async function getPrintable(pool, id) {
-  const [[record]] = await pool.query('SELECT * FROM records WHERE id = ?', [Number(id) || 0]);
-  if (!record) return { ok: false, error: 'Record not found' };
-  if (record.archived_at) return { ok: false, error: 'Restore this record before printing.' };
-  const [employees] = await pool.query(
-    'SELECT full_name, designation, employment_status FROM record_employees WHERE record_id = ? ORDER BY position',
-    [record.id],
-  );
-  return { ok: true, data: { ...record, employees } };
+  const res = await getRecord(pool, id);
+  if (res.ok && res.data.archived_at) return { ok: false, error: 'Restore this record before printing.' };
+  return res;
 }
 
 // "DEPARTURE:______" + value -> "DEPARTURE: value". The template's own label (and leading space) is kept.

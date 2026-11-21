@@ -190,3 +190,30 @@ test('records:preview returns the form for a saved record and refuses an archive
   await pool.query('UPDATE records SET archived_at = NOW()');
   expect(await c('records:preview', { id: recordId })).toEqual({ ok: false, error: 'Restore this record before printing.' });
 });
+
+// ---------- Phase 3: browse, edit, archive ----------
+
+test('browse and edit routes need a changed password', async () => {
+  await call(1, 'auth:login', { username: 'admin', password: 'admin' });
+  for (const ch of ['records:list', 'records:get', 'records:update', 'records:archive', 'records:restore']) {
+    expect(await call(1, ch, {})).toEqual({ ok: false, error: 'Change your password first' });
+  }
+});
+
+test('records list, get, update, archive and restore round trip', async () => {
+  const { c, recordId, number, rec, appr } = await printSetup();
+  expect((await c('records:list', {})).data.rows.map((r) => r.number)).toEqual([number]);
+  const got = (await c('records:get', { id: recordId })).data;
+  expect(got.employees.map((e) => e.full_name)).toEqual(['Ana']);
+  const upd = await c('records:update', {
+    id: recordId, dateFiled: '2026-11-20', employeeIds: [got.employees[0].employee_id], destination: 'Manila',
+    inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-20', departureAt: '2026-11-20T08:00', purpose: 'Meeting',
+    recommendingId: rec, approvingId: appr,
+  });
+  expect(upd).toEqual({ ok: true, data: { id: recordId, number, formType: 'PLS' } });
+  expect((await c('records:list', { search: 'manila' })).data.rows.map((r) => r.id)).toEqual([recordId]);
+  expect((await c('records:archive', { id: recordId })).ok).toBe(true);
+  expect((await c('records:list', {})).data.rows).toEqual([]);
+  expect((await c('records:restore', { id: recordId })).ok).toBe(true);
+  expect((await c('records:list', {})).data.rows.map((r) => r.id)).toEqual([recordId]);
+});

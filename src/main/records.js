@@ -1,4 +1,4 @@
-import { fieldErrors, text } from './directory.js';
+import { fieldErrors, text, likeLiteral } from './directory.js';
 import { ISSUING_OFFICES, activeSignatory } from './signatories.js';
 
 export const FORM_TYPES = ['PLS', 'TO'];
@@ -29,7 +29,8 @@ async function validateHeader(conn, input, errors) {
 }
 
 // Everything staff write on the form: dates, employees, destination, purpose.
-async function validateDetails(conn, input, errors) {
+// keep: employee_id -> saved snapshot. Those people stay valid (even if archived since) and keep their saved details.
+async function validateDetails(conn, input, errors, keep = new Map()) {
   if (!isDate(input.dateFiled)) errors.dateFiled = 'Required';
   for (const f of ['destination', 'purpose']) if (!text(input[f])) errors[f] = 'Required';
   if (!errors.purpose && text(input.purpose).length > MAX_PURPOSE) errors.purpose = `At most ${MAX_PURPOSE} characters`;
@@ -49,12 +50,15 @@ async function validateDetails(conn, input, errors) {
   else if (ids.length > 5) errors.employees = 'At most 5 employees';
   else if (new Set(ids).size !== ids.length) errors.employees = 'Remove duplicate employees';
   else {
-    const [rows] = await conn.query(
-      'SELECT id, office_id, full_name, designation, employment_status FROM employees WHERE id IN (?) AND archived_at IS NULL',
-      [ids],
-    );
-    if (rows.length !== ids.length) errors.employees = 'Choose active employees';
-    else return ids.map((id) => rows.find((r) => r.id === id));
+    const fresh = ids.filter((id) => !keep.has(id));
+    const [rows] = fresh.length
+      ? await conn.query(
+          'SELECT id, office_id, full_name, designation, employment_status FROM employees WHERE id IN (?) AND archived_at IS NULL',
+          [fresh],
+        )
+      : [[]];
+    if (rows.length !== fresh.length) errors.employees = 'Choose active employees';
+    else return ids.map((id) => keep.get(id) ?? rows.find((r) => r.id === id));
   }
   return [];
 }
@@ -70,17 +74,17 @@ const insertEmployees = (conn, recordId, employees) =>
     [employees.map((e, i) => [recordId, i + 1, e.id, e.office_id, e.full_name, e.designation, e.employment_status])],
   );
 
-async function findOverlaps(conn, employees, from, to) {
+async function findOverlaps(conn, employees, from, to, excludeId = 0) {
   const [rows] = await conn.query(
     `SELECT e.full_name AS employeeName, r.form_type AS formType, r.number,
             r.inclusive_from AS inclusiveFrom, r.inclusive_to AS inclusiveTo
        FROM record_employees re
        JOIN records r ON r.id = re.record_id
        JOIN employees e ON e.id = re.employee_id
-      WHERE re.employee_id IN (?) AND r.archived_at IS NULL
+      WHERE re.employee_id IN (?) AND r.archived_at IS NULL AND r.id <> ?
         AND r.inclusive_from <= ? AND r.inclusive_to >= ?
       ORDER BY e.full_name, r.number`,
-    [employees.map((e) => e.id), to, from],
+    [employees.map((e) => e.id), excludeId, to, from],
   );
   return rows;
 }
@@ -220,4 +224,152 @@ export function fillBlank(pool, input, { userId }) {
     }
     return { ok: true, data: { id: rec.id, number: rec.number, formType: rec.form_type } };
   });
+}
+
+const STATUS_WHERE = {
+  active: 'r.archived_at IS NULL',
+  filled: "r.archived_at IS NULL AND r.status = 'filled'",
+  blank: "r.archived_at IS NULL AND r.status = 'blank'",
+  archived: 'r.archived_at IS NOT NULL',
+};
+const LIST_LIMIT = 200;
+
+export async function listRecords(pool, { search = '', formType = '', issuingOffice = '', officeId = null, from = '', to = '', status = 'active' } = {}) {
+  if (from && to && to < from) return fieldErrors({ to: 'End date is before start date' });
+  const where = [STATUS_WHERE[status] ?? STATUS_WHERE.active];
+  const params = [];
+  if (text(search)) {
+    const like = likeLiteral(text(search));
+    where.push(`(r.number LIKE ? ESCAPE '\\\\' OR r.destination LIKE ? ESCAPE '\\\\' OR r.purpose LIKE ? ESCAPE '\\\\'
+      OR EXISTS (SELECT 1 FROM record_employees s WHERE s.record_id = r.id AND s.full_name LIKE ? ESCAPE '\\\\'))`);
+    params.push(like, like, like, like);
+  }
+  if (FORM_TYPES.includes(formType)) {
+    where.push('r.form_type = ?');
+    params.push(formType);
+  }
+  if (ISSUING_OFFICES[issuingOffice]) {
+    where.push('r.issuing_office = ?');
+    params.push(issuingOffice);
+  }
+  const oid = Number(officeId) || 0; // a non-numeric id from IPC means no filter, never NaN in SQL
+  if (oid) {
+    where.push('EXISTS (SELECT 1 FROM record_employees o WHERE o.record_id = r.id AND o.office_id = ?)');
+    params.push(oid);
+  }
+  // Overlap with the travel dates; a blank has NULL dates, so it never matches a range.
+  if (from) {
+    where.push('r.inclusive_to >= ?');
+    params.push(from);
+  }
+  if (to) {
+    where.push('r.inclusive_from <= ?');
+    params.push(to);
+  }
+  const [rows] = await pool.query(
+    `SELECT r.id, r.number, r.form_type AS formType, r.issuing_office AS issuingOffice, r.status,
+            r.archived_at IS NOT NULL AS archived,
+            (SELECT GROUP_CONCAT(n.full_name ORDER BY n.position SEPARATOR ', ') FROM record_employees n WHERE n.record_id = r.id) AS names,
+            r.destination, r.inclusive_from AS inclusiveFrom, r.inclusive_to AS inclusiveTo, r.date_filed AS dateFiled
+       FROM records r
+      WHERE ${where.join(' AND ')}
+      ORDER BY r.id DESC
+      LIMIT ${LIST_LIMIT + 1}`,
+    params,
+  );
+  return {
+    ok: true,
+    data: { rows: rows.slice(0, LIST_LIMIT).map((r) => ({ ...r, archived: r.archived === 1 })), truncated: rows.length > LIST_LIMIT },
+  };
+}
+
+export async function getRecord(pool, id) {
+  const [[record]] = await pool.query('SELECT * FROM records WHERE id = ?', [Number(id) || 0]);
+  if (!record) return { ok: false, error: 'Record not found' };
+  const [employees] = await pool.query(
+    'SELECT employee_id, office_id, full_name, designation, employment_status FROM record_employees WHERE record_id = ? ORDER BY position',
+    [record.id],
+  );
+  return { ok: true, data: { ...record, employees } };
+}
+
+const LOCKED = { ok: false, error: 'This record can no longer be edited.' };
+
+// Edits a filled, active record. Number, form type, issuing office and status never change.
+export function updateRecord(pool, input) {
+  return withConnection(pool, async (conn) => {
+    const editable = "SELECT * FROM records WHERE id = ? AND status = 'filled' AND archived_at IS NULL";
+    const [[rec]] = await conn.query(editable, [Number(input.id) || 0]);
+    if (!rec) return LOCKED;
+    const [saved] = await conn.query(
+      'SELECT employee_id AS id, office_id, full_name, designation, employment_status FROM record_employees WHERE record_id = ?',
+      [rec.id],
+    );
+    const errors = {};
+    // The saved signatory stays as saved (even if archived since); a different one must be active now.
+    const signer = async (role) => {
+      if (Number(input[`${role}Id`]) === rec[`${role}_id`]) return { id: rec[`${role}_id`], name: rec[`${role}_name`], title: rec[`${role}_title`] };
+      const s = await activeSignatory(conn, input[`${role}Id`], role);
+      if (!s) errors[`${role}Id`] = `Choose an active ${role} signatory`;
+      return s;
+    };
+    const recommending = await signer('recommending');
+    const approving = await signer('approving');
+    const employees = await validateDetails(conn, input, errors, new Map(saved.map((e) => [e.id, e])));
+    if (Object.keys(errors).length) return fieldErrors(errors);
+    if (input.confirmOverlap !== true) {
+      const overlaps = await findOverlaps(conn, employees, input.inclusiveFrom, input.inclusiveTo, rec.id);
+      if (overlaps.length) return { ok: false, error: 'Overlapping records', overlaps };
+    }
+    await conn.beginTransaction();
+    try {
+      const [[still]] = await conn.query(`${editable} FOR UPDATE`, [rec.id]);
+      if (!still) {
+        await conn.rollback();
+        return LOCKED; // archived in the meantime
+      }
+      await conn.query(
+        `UPDATE records SET date_filed = ?, destination = ?, vehicle = ?, inclusive_from = ?, inclusive_to = ?,
+           departure_at = ?, return_at = ?, purpose = ?,
+           recommending_id = ?, recommending_name = ?, recommending_title = ?, approving_id = ?, approving_name = ?, approving_title = ?
+         WHERE id = ?`,
+        [...detailValues(input), recommending.id, recommending.name, recommending.title, approving.id, approving.name, approving.title, rec.id],
+      );
+      await conn.query('DELETE FROM record_employees WHERE record_id = ?', [rec.id]);
+      await insertEmployees(conn, rec.id, employees);
+      await conn.commit();
+    } catch (e) {
+      await conn.rollback();
+      throw e;
+    }
+    return { ok: true, data: { id: rec.id, number: rec.number, formType: rec.form_type } };
+  });
+}
+
+async function findRecord(pool, id) {
+  const [[rec]] = await pool.query(
+    'SELECT id, number, status, inclusive_from, inclusive_to FROM records WHERE id = ?',
+    [Number(id) || 0],
+  );
+  return rec;
+}
+
+export async function archiveRecord(pool, { id }) {
+  const rec = await findRecord(pool, id);
+  if (!rec) return { ok: false, error: 'Record not found' };
+  await pool.query('UPDATE records SET archived_at = COALESCE(archived_at, NOW()) WHERE id = ?', [rec.id]);
+  return { ok: true, data: { id: rec.id, number: rec.number } };
+}
+
+// US-9: a filled record coming back warns like a save would (US-5); a blank has no dates or people to check.
+export async function restoreRecord(pool, { id, confirmOverlap }) {
+  const rec = await findRecord(pool, id);
+  if (!rec) return { ok: false, error: 'Record not found' };
+  if (rec.status === 'filled' && confirmOverlap !== true) {
+    const [employees] = await pool.query('SELECT employee_id AS id FROM record_employees WHERE record_id = ?', [rec.id]);
+    const overlaps = await findOverlaps(pool, employees, rec.inclusive_from, rec.inclusive_to, rec.id);
+    if (overlaps.length) return { ok: false, error: 'Overlapping records', overlaps };
+  }
+  await pool.query('UPDATE records SET archived_at = NULL WHERE id = ?', [rec.id]);
+  return { ok: true, data: { id: rec.id, number: rec.number } };
 }

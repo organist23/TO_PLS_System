@@ -3,7 +3,7 @@ import * as directory from './directory.js';
 import * as signatories from './signatories.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createRecord, issueBlank, listBlank, fillBlank } from './records.js';
+import { createRecord, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord } from './records.js';
 import { getPrintable, buildWorkbook, previewOf } from './print.js';
 
 // Access levels: public, logged in (password change may be pending), ready (logged in, password changed).
@@ -46,6 +46,11 @@ const ROUTES = {
       ['signatories:setDefault', signatories.setDefault],
     ].map(([ch, fn]) => [ch, ['ready', ({ pool, p }) => fn(pool, p)]]),
   ),
+  'records:list': ['ready', ({ pool, p }) => listRecords(pool, p)],
+  'records:get': ['ready', ({ pool, p }) => getRecord(pool, p.id)],
+  'records:update': ['ready', ({ pool, p }) => updateRecord(pool, p)],
+  'records:archive': ['ready', ({ pool, p }) => archiveRecord(pool, p)],
+  'records:restore': ['ready', ({ pool, p }) => restoreRecord(pool, p)],
   'records:create': ['ready', ({ pool, user, p }) => createRecord(pool, p, { userId: user.id })],
   'records:issueBlank': ['ready', ({ pool, user, p }) => issueBlank(pool, p, { userId: user.id })],
   'records:listBlank': ['ready', ({ pool }) => listBlank(pool)],

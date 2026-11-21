@@ -3,7 +3,7 @@ import { freshTestDb, testConfig } from '../helpers/testDb.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee } from '../../src/main/directory.js';
 import { createSignatory, archiveSignatory, updateSignatory } from '../../src/main/signatories.js';
-import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank } from '../../src/main/records.js';
+import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord } from '../../src/main/records.js';
 
 let pool, ids;
 const NOV = new Date(2026, 10, 20, 9, 0);
@@ -245,4 +245,216 @@ test('blank records never count as overlaps; filling one can warn', async () => 
   const [[r]] = await pool.query('SELECT status FROM records WHERE id = ?', [data.id]);
   expect(r.status).toBe('blank');
   expect((await fillBlank(pool, { id: data.id, ...details({ inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' }), confirmOverlap: true }, { userId: ids.userId })).ok).toBe(true);
+});
+
+// ---------- Phase 3: list, get, edit, archive ----------
+
+// A: PLS Mayor 2026-11-1 (Emp 1, MHO), B: TO SB SB 2026-11-1 (MARIA PEÑA, RHU), C: blank PLS 2026-11-2, D: archived PLS 2026-11-3.
+async function seedList() {
+  const rhu = (await createOffice(pool, { name: 'RHU' })).data.id;
+  const pena = (await createEmployee(pool, { fullName: 'MARIA PEÑA', designation: 'Nurse', employmentStatus: 'Casual', officeId: rhu })).data.id;
+  const a = (await create({ inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22', purpose: 'Submit 100% reports' })).data;
+  const b = (await create({ formType: 'TO', issuingOffice: 'SB', employeeIds: [pena], destination: 'Manila', inclusiveFrom: '2026-11-23', inclusiveTo: '2026-11-24', purpose: 'Seminar' })).data;
+  const c = (await blank()).data;
+  const d = (await create({ employeeIds: [ids.emps[1]], destination: 'Cebu', inclusiveFrom: '2026-11-25', inclusiveTo: '2026-11-25' })).data;
+  await pool.query('UPDATE records SET archived_at = NOW() WHERE id = ?', [d.id]);
+  return { rhu, pena, a, b, c, d };
+}
+const numbers = async (filters) => (await listRecords(pool, filters)).data.rows.map((r) => r.number);
+
+test('listRecords default is active (filled and blank), newest first', async () => {
+  await seedList();
+  expect(await numbers({})).toEqual(['2026-11-2', 'SB 2026-11-1', '2026-11-1']);
+  const { rows, truncated } = (await listRecords(pool, {})).data;
+  expect(truncated).toBe(false);
+  expect(rows[1]).toEqual({
+    id: expect.any(Number), number: 'SB 2026-11-1', formType: 'TO', issuingOffice: 'SB', status: 'filled', archived: false,
+    names: 'MARIA PEÑA', destination: 'Manila', inclusiveFrom: '2026-11-23', inclusiveTo: '2026-11-24', dateFiled: '2026-11-20',
+  });
+  expect(rows[0]).toMatchObject({ status: 'blank', names: null, inclusiveFrom: null });
+});
+
+test('listRecords status filters', async () => {
+  await seedList();
+  expect(await numbers({ status: 'filled' })).toEqual(['SB 2026-11-1', '2026-11-1']);
+  expect(await numbers({ status: 'blank' })).toEqual(['2026-11-2']);
+  expect(await numbers({ status: 'archived' })).toEqual(['2026-11-3']);
+  expect((await listRecords(pool, { status: 'archived' })).data.rows[0].archived).toBe(true);
+});
+
+test('listRecords search: number, employee name, destination, purpose, literal wildcards', async () => {
+  await seedList();
+  expect(await numbers({ search: '11-2' })).toEqual(['2026-11-2']);
+  expect(await numbers({ search: 'SB 2026' })).toEqual(['SB 2026-11-1']);
+  expect(await numbers({ search: 'peña' })).toEqual(['SB 2026-11-1']);
+  expect(await numbers({ search: 'emp 1' })).toEqual(['2026-11-1']);
+  expect(await numbers({ search: 'manila' })).toEqual(['SB 2026-11-1']);
+  expect(await numbers({ search: 'seminar' })).toEqual(['SB 2026-11-1']);
+  expect(await numbers({ search: '%' })).toEqual(['2026-11-1']);
+  expect(await numbers({ search: '_' })).toEqual([]);
+  expect(await numbers({ search: "o'brien" })).toEqual([]);
+  expect(await numbers({ search: '  ' })).toEqual(['2026-11-2', 'SB 2026-11-1', '2026-11-1']);
+});
+
+test('listRecords form, issuing office and employee office filters', async () => {
+  const s = await seedList();
+  expect(await numbers({ formType: 'TO' })).toEqual(['SB 2026-11-1']);
+  expect(await numbers({ formType: 'PLS' })).toEqual(['2026-11-2', '2026-11-1']);
+  expect(await numbers({ issuingOffice: 'SB' })).toEqual(['SB 2026-11-1']);
+  expect(await numbers({ officeId: s.rhu })).toEqual(['SB 2026-11-1']);
+  expect(await numbers({ officeId: ids.officeId })).toEqual(['2026-11-1']);
+  expect(await numbers({ officeId: 'x' })).toEqual(['2026-11-2', 'SB 2026-11-1', '2026-11-1']);
+});
+
+test('listRecords travel-date range overlaps inclusive dates; blanks never match', async () => {
+  await seedList();
+  expect(await numbers({ from: '2026-11-21', to: '2026-11-21' })).toEqual(['2026-11-1']);
+  expect(await numbers({ from: '2026-11-22', to: '2026-11-23' })).toEqual(['SB 2026-11-1', '2026-11-1']);
+  expect(await numbers({ from: '2026-11-23' })).toEqual(['SB 2026-11-1']);
+  expect(await numbers({ to: '2026-11-19' })).toEqual([]);
+  expect(await listRecords(pool, { from: '2026-11-22', to: '2026-11-21' })).toEqual({
+    ok: false, error: 'Check the highlighted fields', errors: { to: 'End date is before start date' },
+  });
+});
+
+test('listRecords returns the newest 200 and says when more match', async () => {
+  const { a } = await seedList();
+  const [[src]] = await pool.query('SELECT * FROM records WHERE id = ?', [a.id]);
+  const { id, created_at, ...cols } = src;
+  const rows = Array.from({ length: 198 }, (_, i) => Object.values({ ...cols, seq: 100 + i, number: `2026-11-${100 + i}` }));
+  await pool.query(`INSERT INTO records (${Object.keys(cols).join(', ')}) VALUES ?`, [rows]);
+  // 3 seeded active + 198 = 201 active rows
+  const { data } = await listRecords(pool, {});
+  expect(data.rows.length).toBe(200);
+  expect(data.truncated).toBe(true);
+  expect(data.rows[0].number).toBe('2026-11-297');
+  expect((await listRecords(pool, { formType: 'TO' })).data.truncated).toBe(false);
+});
+
+test('getRecord returns the record with employees in position order', async () => {
+  const r = (await create({ employeeIds: [ids.emps[2], ids.emps[0]] })).data;
+  const { ok, data } = await getRecord(pool, r.id);
+  expect(ok).toBe(true);
+  expect(data).toMatchObject({ id: r.id, number: '2026-11-1', form_type: 'PLS', status: 'filled', approving_name: 'MAYOR' });
+  expect(data.employees).toEqual([
+    { employee_id: ids.emps[2], office_id: ids.officeId, full_name: 'Emp 3', designation: 'Desig 3', employment_status: 'Permanent' },
+    { employee_id: ids.emps[0], office_id: ids.officeId, full_name: 'Emp 1', designation: 'Desig 1', employment_status: 'Permanent' },
+  ]);
+  expect(await getRecord(pool, 99999)).toEqual({ ok: false, error: 'Record not found' });
+  expect(await getRecord(pool, 'x')).toEqual({ ok: false, error: 'Record not found' });
+});
+
+const edit = (id, over = {}) => updateRecord(pool, { id, ...details(over), recommendingId: ids.rec, approvingId: ids.appr, ...over });
+const row = async (id) => (await pool.query('SELECT * FROM records WHERE id = ?', [id]))[0][0];
+const savedNames = async (id) => (await pool.query('SELECT full_name FROM record_employees WHERE record_id = ? ORDER BY position', [id]))[0].map((r) => r.full_name);
+
+test('updateRecord changes details and employees; number unchanged', async () => {
+  const r = (await create({})).data;
+  const res = await edit(r.id, {
+    destination: 'Manila', inclusiveFrom: '2026-11-24', inclusiveTo: '2026-11-25', departureAt: '2026-11-24T06:30',
+    returnAt: '2026-11-25T18:00', purpose: 'Training', vehicle: 'Service van', dateFiled: '2026-11-21', employeeIds: [ids.emps[1], ids.emps[0]],
+  });
+  expect(res).toEqual({ ok: true, data: { id: r.id, number: '2026-11-1', formType: 'PLS' } });
+  expect(await row(r.id)).toMatchObject({
+    number: '2026-11-1', destination: 'Manila', inclusive_from: '2026-11-24', inclusive_to: '2026-11-25', departure_at: '2026-11-24 06:30:00',
+    return_at: '2026-11-25 18:00:00', purpose: 'Training', vehicle: 'Service van', date_filed: '2026-11-21',
+  });
+  expect(await savedNames(r.id)).toEqual(['Emp 2', 'Emp 1']);
+});
+
+test('updateRecord ignores number, form type, office and status in the payload', async () => {
+  const r = (await create({})).data;
+  expect((await edit(r.id, { formType: 'TO', issuingOffice: 'SB', number: '9999', status: 'blank', seq: 9, period: '2020-01' })).ok).toBe(true);
+  expect(await row(r.id)).toMatchObject({ number: '2026-11-1', form_type: 'PLS', issuing_office: 'MAYOR', status: 'filled', seq: 1, period: '2026-11' });
+});
+
+test('updateRecord keeps archived-since employees and signatories with their saved details', async () => {
+  const r = (await create({ employeeIds: [ids.emps[0]] })).data;
+  await updateEmployee(pool, { id: ids.emps[0], fullName: 'Renamed', designation: 'X', employmentStatus: 'Casual', officeId: ids.officeId });
+  await archiveEmployee(pool, { id: ids.emps[0] });
+  await updateSignatory(pool, { id: ids.appr, name: 'NEW MAYOR NAME', title: 'MUNICIPAL MAYOR', role: 'approving' });
+  await archiveSignatory(pool, { id: ids.appr });
+  expect((await edit(r.id, { employeeIds: [ids.emps[0], ids.emps[1]], destination: 'Manila' })).ok).toBe(true);
+  const [emps] = await pool.query('SELECT full_name, designation, employment_status FROM record_employees WHERE record_id = ? ORDER BY position', [r.id]);
+  expect(emps).toEqual([
+    { full_name: 'Emp 1', designation: 'Desig 1', employment_status: 'Permanent' },
+    { full_name: 'Emp 2', designation: 'Desig 2', employment_status: 'Permanent' },
+  ]);
+  expect(await row(r.id)).toMatchObject({ approving_id: ids.appr, approving_name: 'MAYOR', destination: 'Manila' });
+});
+
+test('updateRecord: newly added people and signatories must be active and take current details', async () => {
+  const r = (await create({})).data;
+  await archiveEmployee(pool, { id: ids.emps[2] });
+  expect((await edit(r.id, { employeeIds: [ids.emps[0], ids.emps[2]] })).errors).toEqual({ employees: 'Choose active employees' });
+  const gone = (await createSignatory(pool, { name: 'OLD', title: 'OIC', role: 'approving' })).data.id;
+  await archiveSignatory(pool, { id: gone });
+  expect((await edit(r.id, { approvingId: gone, recommendingId: ids.appr })).errors).toEqual({
+    approvingId: 'Choose an active approving signatory', recommendingId: 'Choose an active recommending signatory',
+  });
+  const acting = (await createSignatory(pool, { name: 'ACTING', title: 'ACTING MAYOR', role: 'approving' })).data.id;
+  expect((await edit(r.id, { approvingId: acting })).ok).toBe(true);
+  expect(await row(r.id)).toMatchObject({ approving_id: acting, approving_name: 'ACTING', approving_title: 'ACTING MAYOR', destination: 'Provincial Capitol' });
+  expect(await savedNames(r.id)).toEqual(['Emp 1']);
+});
+
+test('updateRecord uses the US-5 validation', async () => {
+  const r = (await create({})).data;
+  expect((await edit(r.id, { destination: '', purpose: 'a'.repeat(361), departureAt: '2026-11-20T08:00', returnAt: '2026-11-20T07:00', employeeIds: [] })).errors).toEqual({
+    destination: 'Required', purpose: 'At most 360 characters', returnAt: 'Return is before departure', employees: 'Add at least one employee',
+  });
+  expect(await row(r.id)).toMatchObject({ destination: 'Provincial Capitol' });
+});
+
+test('updateRecord overlap ignores the record itself and warns for others', async () => {
+  const r = (await create({ inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22' })).data;
+  expect((await edit(r.id, { inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-23' })).ok).toBe(true);
+  await create({ employeeIds: [ids.emps[1]], inclusiveFrom: '2026-11-25', inclusiveTo: '2026-11-25' });
+  const res = await edit(r.id, { employeeIds: [ids.emps[0], ids.emps[1]], inclusiveFrom: '2026-11-25', inclusiveTo: '2026-11-26' });
+  expect(res.error).toBe('Overlapping records');
+  expect(res.overlaps.map((o) => `${o.employeeName} ${o.number}`)).toEqual(['Emp 2 2026-11-2']);
+  expect(await savedNames(r.id)).toEqual(['Emp 1']);
+  expect((await edit(r.id, { employeeIds: [ids.emps[0], ids.emps[1]], inclusiveFrom: '2026-11-25', inclusiveTo: '2026-11-26', confirmOverlap: true })).ok).toBe(true);
+  expect(await savedNames(r.id)).toEqual(['Emp 1', 'Emp 2']);
+});
+
+test('updateRecord refuses archived, blank and missing records', async () => {
+  const refused = { ok: false, error: 'This record can no longer be edited.' };
+  const r = (await create({})).data;
+  await archiveRecord(pool, { id: r.id });
+  expect(await edit(r.id, { destination: 'Manila' })).toEqual(refused);
+  expect((await row(r.id)).destination).toBe('Provincial Capitol');
+  expect(await edit((await blank()).data.id)).toEqual(refused);
+  expect(await edit(99999)).toEqual(refused);
+});
+
+test('archive and restore; archived numbers are never reused; blanks can be archived', async () => {
+  const r = (await create({})).data;
+  expect(await archiveRecord(pool, { id: r.id })).toEqual({ ok: true, data: { id: r.id, number: '2026-11-1' } });
+  expect(await numbers({})).toEqual([]);
+  expect(await numbers({ status: 'archived' })).toEqual(['2026-11-1']);
+  expect(await numberOf({ employeeIds: [ids.emps[1]] })).toBe('2026-11-2');
+  expect(await restoreRecord(pool, { id: r.id })).toEqual({ ok: true, data: { id: r.id, number: '2026-11-1' } });
+  expect(await numbers({})).toEqual(['2026-11-2', '2026-11-1']);
+  const b = (await blank()).data;
+  expect((await archiveRecord(pool, { id: b.id })).ok).toBe(true);
+  expect(await numbers({ status: 'archived' })).toEqual(['2026-11-3']);
+  expect((await blank()).data.number).toBe('2026-11-4');
+  expect(await archiveRecord(pool, { id: 99999 })).toEqual({ ok: false, error: 'Record not found' });
+  expect(await restoreRecord(pool, { id: 99999 })).toEqual({ ok: false, error: 'Record not found' });
+});
+
+test('restore warns when a filled record now overlaps another; confirm restores; blanks skip the check', async () => {
+  const r = (await create({ inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22' })).data;
+  await archiveRecord(pool, { id: r.id });
+  await create({ employeeIds: [ids.emps[0], ids.emps[1]], inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' }); // 2026-11-2
+  const res = await restoreRecord(pool, { id: r.id });
+  expect(res.error).toBe('Overlapping records');
+  expect(res.overlaps.map((o) => `${o.employeeName} ${o.number}`)).toEqual(['Emp 1 2026-11-2']);
+  expect((await row(r.id)).archived_at).not.toBeNull();
+  expect(await restoreRecord(pool, { id: r.id, confirmOverlap: true })).toEqual({ ok: true, data: { id: r.id, number: '2026-11-1' } });
+  expect((await row(r.id)).archived_at).toBeNull();
+  const b = (await blank()).data;
+  await archiveRecord(pool, { id: b.id });
+  expect((await restoreRecord(pool, { id: b.id })).ok).toBe(true);
 });

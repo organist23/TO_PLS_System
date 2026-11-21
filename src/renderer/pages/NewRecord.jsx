@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { btn, inputClass, Field, Banner } from '../components/ui.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
-import FormPreview from '../components/FormPreview.jsx';
+import { usePrint } from '../components/PrintFlow.jsx';
 import { ISSUING_OFFICES } from '../../main/signatories.js';
 
 const MAX_EMPLOYEES = 5;
@@ -9,6 +9,7 @@ const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
+const toLocal = (dt) => (dt ? dt.slice(0, 16).replace(' ', 'T') : ''); // 'YYYY-MM-DD HH:MM:SS' -> datetime-local
 const blankDetails = () => ({
   dateFiled: today(), employeeIds: [], destination: '', vehicle: '', inclusiveFrom: today(), inclusiveTo: today(),
   departureAt: '', returnAt: '', purpose: '',
@@ -30,7 +31,8 @@ function RadioGroup({ legend, name, value, options, onChange, disabled = false }
   );
 }
 
-export default function NewRecord() {
+// params: {} for a new record, { mode: 'edit' | 'fill', id } when opened from Records.
+export default function NewRecord({ params = {}, go }) {
   const [lists, setLists] = useState({ status: 'loading' });
   const [form, setForm] = useState({ formType: 'PLS', issuingOffice: 'MAYOR', recommendingId: '', approvingId: '', ...blankDetails() });
   const [pick, setPick] = useState('');
@@ -40,15 +42,13 @@ export default function NewRecord() {
   const [notice, setNotice] = useState('');
   const [overlaps, setOverlaps] = useState(null);
   const [saved, setSaved] = useState(null); // last saved or issued record: { id, number, formType }
-  const [printing, setPrinting] = useState({ pending: false, path: '', error: '' });
+  const { print, printing, resetPrinting, openFile, dialog: previewDialog } = usePrint();
   const [blanks, setBlanks] = useState({ status: 'loading', rows: [] });
   const [filling, setFilling] = useState(null); // blank record being filled in
+  const [editing, setEditing] = useState(null); // filled record being edited (records:get row)
+  const [gone, setGone] = useState(''); // the record params.id names cannot be edited or filled
   const [issueOpen, setIssueOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
-  const [preview, setPreview] = useState(null); // { id, number, formType, model }
-  const previewRef = useRef(null);
-  const previewSeq = useRef(0);
-  const saveButtonRef = useRef(null); // a preview closed while loading must not reopen when its result arrives
   const busy = useRef(false);
 
   const loadBlanks = useCallback(async () => {
@@ -58,30 +58,46 @@ export default function NewRecord() {
   }, []);
   useEffect(() => void loadBlanks(), [loadBlanks]);
 
-  useEffect(() => {
-    const d = previewRef.current;
-    if (!d) return;
-    if (preview && !d.open) d.showModal();
-    if (!preview && d.open) d.close();
-    if (preview?.model) saveButtonRef.current?.focus(); // the button was disabled while loading, so autoFocus missed it
-  }, [preview]);
-
   const load = useCallback(async () => {
     setLists({ status: 'loading' });
-    const [emps, sigs, defs] = await Promise.all([
+    const [emps, sigs, defs, rec] = await Promise.all([
       window.api.invoke('employees:list', {}),
       window.api.invoke('signatories:list', {}),
       window.api.invoke('signatories:defaults'),
+      params.id ? window.api.invoke('records:get', { id: params.id }) : { ok: true, data: null },
     ]);
     const failed = [emps, sigs, defs].find((r) => !r.ok);
     if (failed) return setLists({ status: 'error', error: failed.error });
+    if (params.id) {
+      const r = rec.ok ? rec.data : null;
+      const active = r && !r.archived_at;
+      if (params.mode === 'edit' && active && r.status === 'filled') {
+        setEditing(r);
+        setForm({
+          formType: r.form_type, issuingOffice: r.issuing_office,
+          recommendingId: String(r.recommending_id), approvingId: String(r.approving_id),
+          dateFiled: r.date_filed, employeeIds: r.employees.map((e) => e.employee_id), destination: r.destination,
+          vehicle: r.vehicle, inclusiveFrom: r.inclusive_from, inclusiveTo: r.inclusive_to,
+          departureAt: toLocal(r.departure_at), returnAt: toLocal(r.return_at), purpose: r.purpose,
+        });
+      } else if (params.mode === 'fill' && active && r.status === 'blank') {
+        setFilling({
+          id: r.id, number: r.number, formType: r.form_type, issuingOffice: r.issuing_office,
+          recommendingName: r.recommending_name, recommendingTitle: r.recommending_title,
+          approvingName: r.approving_name, approvingTitle: r.approving_title,
+        });
+        setForm((f) => ({ ...f, ...blankDetails(), formType: r.form_type, issuingOffice: r.issuing_office }));
+      } else {
+        setGone(!rec.ok ? rec.error : params.mode === 'fill' ? 'This blank form is no longer available.' : 'This record can no longer be edited.');
+      }
+    }
     setLists({ status: 'ready', employees: emps.data, signatories: sigs.data, defaults: defs.data });
-  }, []);
+  }, [params.id, params.mode]);
   useEffect(() => void load(), [load]);
 
   // Signatories follow the issuing office's defaults whenever the office changes or the lists (re)load.
   useEffect(() => {
-    if (lists.status !== 'ready') return;
+    if (lists.status !== 'ready' || params.mode === 'edit') return; // an edit keeps the record's signatories
     const d = lists.defaults[form.issuingOffice];
     setForm((f) => ({ ...f, recommendingId: d.recommending ?? '', approvingId: d.approving ?? '' }));
   }, [lists, form.issuingOffice]);
@@ -90,8 +106,13 @@ export default function NewRecord() {
   if (lists.status === 'error') {
     return <Banner action={<button className={btn.link} onClick={load}>Retry</button>}>{lists.error}</Banner>;
   }
+  if (gone) return <Banner action={<button className={btn.link} onClick={() => go('records')}>Back to records</button>}>{gone}</Banner>;
 
-  const byId = Object.fromEntries(lists.employees.map((e) => [e.id, e]));
+  // People already on an edited record show their saved details, even if archived since (US-8).
+  const byId = Object.fromEntries([
+    ...lists.employees.map((e) => [e.id, e]),
+    ...(editing?.employees ?? []).map((e) => [e.employee_id, { fullName: e.full_name, designation: e.designation, employmentStatus: e.employment_status }]),
+  ]);
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
   const field = (key, extra = {}) => ({
     id: `rec-${key}`,
@@ -119,20 +140,20 @@ export default function NewRecord() {
     setFormError('');
     setNotice('');
     setSaved(null);
-    setPrinting({ pending: false, path: '', error: '' });
+    resetPrinting();
+    const withSigners = { ...form, recommendingId: Number(form.recommendingId) || null, approvingId: Number(form.approvingId) || null, confirmOverlap };
     const res = filling
       ? await window.api.invoke('records:fillBlank', { ...form, id: filling.id, confirmOverlap })
-      : await window.api.invoke('records:create', {
-          ...form,
-          recommendingId: Number(form.recommendingId) || null,
-          approvingId: Number(form.approvingId) || null,
-          confirmOverlap,
-        });
+      : editing
+        ? await window.api.invoke('records:update', { ...withSigners, id: editing.id })
+        : await window.api.invoke('records:create', withSigners);
     busy.current = false;
     setSaving(false);
     if (res.overlaps) return setOverlaps(res.overlaps);
     setOverlaps(null);
     if (!res.ok) return res.errors ? setErrors(res.errors) : setFormError(res.error);
+    // Opened from Records: return to the record, where Print is.
+    if (editing || params.mode) return go('records', { openId: res.data.id, notice: `Saved ${res.data.formType} ${res.data.number}` });
     setNotice(`Saved ${res.data.formType} ${res.data.number}`);
     setSaved(res.data);
     setForm((f) => ({ ...f, ...blankDetails() }));
@@ -140,41 +161,6 @@ export default function NewRecord() {
       setFilling(null);
       loadBlanks();
     }
-  }
-
-  // Print shows the preview first (US-15); Save as Excel continues to the save dialog.
-  async function print(rec) {
-    setPrinting({ pending: true, path: '', error: '' });
-    const seq = ++previewSeq.current;
-    setPreview({ ...rec, model: null });
-    const res = await window.api.invoke('records:preview', { id: rec.id });
-    if (seq !== previewSeq.current) return;
-    if (!res.ok) {
-      setPreview(null);
-      return setPrinting({ pending: false, path: '', error: res.error });
-    }
-    setPreview({ ...rec, model: res.data });
-  }
-
-  // The dialog's own close event is the one place a closed preview is noticed: Chromium can close a modal
-  // dialog on Escape without firing cancel. A print error set before closing is kept.
-  function onPreviewClosed() {
-    previewSeq.current++;
-    setPreview(null);
-    setPrinting((p) => (p.error ? p : { pending: false, path: '', error: '' }));
-  }
-
-  async function saveFromPreview() {
-    const { id } = preview;
-    previewRef.current.close();
-    const res = await window.api.invoke('records:print', { id });
-    if (!res.ok) return setPrinting({ pending: false, path: '', error: res.error });
-    setPrinting({ pending: false, path: res.data.canceled ? '' : res.data.path, error: '' });
-  }
-
-  async function openFile() {
-    const res = await window.api.invoke('records:openExport');
-    if (!res.ok) setPrinting((p) => ({ ...p, error: res.error }));
   }
 
   async function issueBlank() {
@@ -200,7 +186,7 @@ export default function NewRecord() {
 
   function startFill(b) {
     setFilling(b);
-    setPrinting({ pending: false, path: '', error: '' });
+    resetPrinting();
     setForm((f) => ({ ...f, ...blankDetails(), formType: b.formType, issuingOffice: b.issuingOffice }));
     setErrors({});
     setFormError('');
@@ -210,21 +196,32 @@ export default function NewRecord() {
   }
 
   function cancelFill() {
+    if (params.mode) return go('records', { openId: params.id });
     setFilling(null);
-    setPrinting({ pending: false, path: '', error: '' });
+    resetPrinting();
     setErrors({});
     setForm((f) => ({ ...f, ...blankDetails() }));
   }
 
-  const signatoryOptions = (role) =>
-    lists.signatories.filter((s) => s.role === role).map((s) => (
+  // An edited record keeps its saved signatory as an option, shown as saved, even if archived since.
+  const signatoryOptions = (role) => {
+    const savedId = editing?.[`${role}_id`];
+    const active = lists.signatories.filter((s) => s.role === role);
+    const options = active.filter((s) => s.id !== savedId).map((s) => (
       <option key={s.id} value={s.id}>{s.name} — {s.title}</option>
     ));
+    if (!savedId) return options;
+    const archived = active.some((s) => s.id === savedId) ? '' : ' (archived)';
+    return [
+      <option key={savedId} value={savedId}>{editing[`${role}_name`]} — {editing[`${role}_title`]}{archived}</option>,
+      ...options,
+    ];
+  };
 
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-900">
-        {filling ? `Fill in ${filling.formType} ${filling.number}` : 'New record'}
+        {filling ? `Fill in ${filling.formType} ${filling.number}` : editing ? `Edit ${editing.form_type} ${editing.number}` : 'New record'}
       </h1>
       {notice && <Banner kind="success">{notice}</Banner>}
       {saved && (
@@ -245,9 +242,9 @@ export default function NewRecord() {
 
       <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-8 rounded-md border border-slate-200 bg-white p-6">
         <div className="grid gap-6 sm:grid-cols-3">
-          <RadioGroup legend="Form" name="formType" value={form.formType} options={[['PLS', 'PLS'], ['TO', 'TO']]} disabled={!!filling}
+          <RadioGroup legend="Form" name="formType" value={form.formType} options={[['PLS', 'PLS'], ['TO', 'TO']]} disabled={!!filling || !!editing}
             onChange={(v) => setForm({ ...form, formType: v })} />
-          <RadioGroup legend="Issuing office" name="issuingOffice" value={form.issuingOffice} options={Object.entries(ISSUING_OFFICES)} disabled={!!filling}
+          <RadioGroup legend="Issuing office" name="issuingOffice" value={form.issuingOffice} options={Object.entries(ISSUING_OFFICES)} disabled={!!filling || !!editing}
             onChange={(v) => setForm({ ...form, issuingOffice: v })} />
           <Field label="Date filed" id="rec-dateFiled" error={errors.dateFiled}><input type="date" {...field('dateFiled')} /></Field>
         </div>
@@ -322,14 +319,15 @@ export default function NewRecord() {
 
         <div className="flex flex-wrap gap-3">
           <button type="submit" className={btn.primary} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-          {filling ? (
-            <button type="button" className={btn.secondary} onClick={cancelFill}>Cancel</button>
+          {filling || editing ? (
+            <button type="button" className={btn.secondary} onClick={editing ? () => go('records', { openId: editing.id }) : cancelFill}>Cancel</button>
           ) : (
             <button type="button" className={btn.secondary} onClick={() => setIssueOpen(true)}>Issue blank form</button>
           )}
         </div>
       </form>
 
+      {!editing && !params.mode && (
       <section aria-labelledby="blanks-heading" className="space-y-3">
         <h2 id="blanks-heading" className="text-base font-semibold text-slate-900">Blank forms to fill</h2>
         {blanks.status === 'loading' && <p className="text-sm text-slate-600">Loading…</p>}
@@ -367,29 +365,9 @@ export default function NewRecord() {
         )}
       </section>
 
-      <dialog
-        ref={previewRef}
-        aria-labelledby="preview-title"
-        onClose={onPreviewClosed}
-        className="m-auto max-h-[90vh] w-full max-w-4xl overflow-auto rounded-md p-6 shadow-[0_15px_35px_hsla(0,0%,0%,.2)] backdrop:bg-slate-900/40"
-      >
-        <div className="flex items-center justify-between gap-4">
-          <h2 id="preview-title" className="text-lg font-semibold text-slate-900">
-            Preview {preview?.formType} {preview?.number}
-          </h2>
-          {preview && (
-            <div className="flex gap-3">
-              <button type="button" className={btn.secondary} onClick={() => previewRef.current.close()}>Close</button>
-              <button type="button" ref={saveButtonRef} className={btn.primary} disabled={!preview.model} onClick={saveFromPreview}>
-                Save as Excel
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="mt-4 rounded-md border border-slate-200 bg-slate-100 p-4">
-          {preview?.model ? <FormPreview model={preview.model} /> : <p className="text-sm text-slate-600">Preparing preview…</p>}
-        </div>
-      </dialog>
+      )}
+
+      {previewDialog}
 
       <ConfirmDialog
         open={issueOpen}

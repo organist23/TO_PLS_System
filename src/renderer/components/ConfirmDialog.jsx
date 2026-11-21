@@ -1,8 +1,9 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { btn } from './ui.jsx';
 
 export default function ConfirmDialog({ open, title, message, confirmLabel, error, pending, onConfirm, onCancel, confirmClass = btn.danger }) {
   const ref = useRef(null);
+  const titleId = useId(); // a page can hold several dialogs
   useEffect(() => {
     const d = ref.current;
     if (open && !d.open) d.showModal();
@@ -12,14 +13,14 @@ export default function ConfirmDialog({ open, title, message, confirmLabel, erro
   return (
     <dialog
       ref={ref}
-      aria-labelledby="confirm-title"
+      aria-labelledby={titleId}
       onCancel={(e) => {
         e.preventDefault(); // Escape: let React state close it
         onCancel();
       }}
       className="m-auto w-full max-w-md rounded-md p-6 shadow-[0_15px_35px_hsla(0,0%,0%,.2)] backdrop:bg-slate-900/40"
     >
-      <h2 id="confirm-title" className="text-lg font-semibold text-slate-900">
+      <h2 id={titleId} className="text-lg font-semibold text-slate-900">
         {title}
       </h2>
       <div className="mt-2 text-sm text-slate-600">{message}</div>
