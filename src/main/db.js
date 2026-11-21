@@ -20,6 +20,9 @@ const MIGRATIONS = [
   ],
 ];
 
+// The schema version this app runs; a backup from a higher version cannot be restored (US-14).
+export const SCHEMA_VERSION = MIGRATIONS.length + 1;
+
 export function createPool(config) {
   return mysql.createPool({ ...config, charset: 'utf8mb4', dateStrings: true });
 }
