@@ -8,6 +8,7 @@ import NewRecord from './pages/NewRecord.jsx';
 import Records from './pages/Records.jsx';
 import OutToday from './pages/OutToday.jsx';
 import Reports from './pages/Reports.jsx';
+import Backup from './pages/Backup.jsx';
 import DbError from './pages/DbError.jsx';
 
 const dbError = location.hash.startsWith('#db-error=') ? decodeURIComponent(location.hash.slice('#db-error='.length)) : null;
@@ -19,10 +20,12 @@ const PAGES = {
   newRecord: ['Forms', NewRecord], // paper first: print blanks, encode returned ones
   records: ['Records', Records],
   reports: ['Reports', Reports],
+  backup: ['Backup', Backup],
 };
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = still checking the session
+  const [loginNotice, setLoginNotice] = useState('');
   const [{ page, params, seq }, setNav] = useState({ page: 'outToday', params: {}, seq: 0 });
   // Every navigation remounts the page, so a nav click always shows the page fresh (e.g. Records list, not a detail).
   const go = (p, prm = {}) => setNav((n) => ({ page: p, params: prm, seq: n.seq + 1 }));
@@ -39,8 +42,18 @@ export default function App() {
     setUser(null);
     go('outToday');
   };
+  // A restore already ended the session in the main process; show Login with what happened.
+  const signOut = (message) => {
+    setLoginNotice(message);
+    setUser(null);
+    go('outToday');
+  };
+  const login = (u) => {
+    setLoginNotice('');
+    setUser(u);
+  };
 
-  if (!user) return <Login onLogin={setUser} />;
+  if (!user) return <Login onLogin={login} notice={loginNotice} />;
   if (user.mustChangePassword) {
     return <ChangePassword onLogout={logout} onDone={() => setUser({ ...user, mustChangePassword: false })} />;
   }
@@ -72,7 +85,7 @@ export default function App() {
           </button>
         </header>
         <main className="mx-auto max-w-5xl p-8">
-          <Page key={seq} params={params} go={go} />
+          <Page key={seq} params={params} go={go} signOut={signOut} />
         </main>
       </div>
     </div>

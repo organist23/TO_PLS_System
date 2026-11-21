@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { btn, inputClass, Field } from '../components/ui.jsx';
 
-export default function Login({ onLogin }) {
+// notice: shown after a restore (US-14), which ends every session.
+export default function Login({ onLogin, notice = '' }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [pending, setPending] = useState(false);
@@ -28,6 +29,7 @@ export default function Login({ onLogin }) {
           <h1 className="text-xl font-semibold text-slate-900">PLS-TO Records System</h1>
           <p className="mt-1 text-sm text-slate-600">Sign in to continue</p>
         </div>
+        {notice && <p role="status" className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">{notice}</p>}
         {error && (
           <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800">
             {error}

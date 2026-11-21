@@ -9,6 +9,7 @@ import {
 } from './records.js';
 import { getPrintable, buildStackWorkbook, previewOf } from './print.js';
 import { outOn, officeReport, reportFile } from './reports.js';
+import { backupName, freePath, writeBackup, restoreBackup } from './backup.js';
 
 // Save dialog, write, and remember the file so records:openExport can open it. Used by every export.
 async function saveExport({ id, os, exported }, defaultName, buffer) {
@@ -103,6 +104,44 @@ const ROUTES = {
     const file = await reportFile(ctx.pool, ctx.p);
     return file.ok ? saveExport(ctx, file.data.name, file.data.buffer) : file;
   }],
+  // US-13: a dated .sql in the folder the user picks.
+  'backup:create': ['ready', async ({ pool, os }) => {
+    const folder = await os.chooseFolder();
+    if (!folder) return { ok: true, data: { canceled: true } };
+    try {
+      const file = await freePath(folder, backupName(new Date()));
+      await writeBackup(pool, file);
+      return { ok: true, data: { path: file } };
+    } catch (e) {
+      console.error('[ipc] backup:create', e);
+      return { ok: false, error: `Could not save the backup: ${e.message}` };
+    }
+  }],
+  // US-14: the file is picked in the main process and remembered, so a renderer-supplied path is never restored.
+  'backup:pick': ['ready', async ({ id, os, picked }) => {
+    const file = await os.chooseBackupFile();
+    if (!file) return { ok: true, data: { canceled: true } };
+    picked.set(id, file);
+    return { ok: true, data: { file: path.basename(file) } };
+  }],
+  'backup:restore': ['ready', async ({ pool, id, os, picked, sessions }) => {
+    const file = picked.get(id);
+    if (!file) return { ok: false, error: 'Choose a backup file first.' };
+    picked.delete(id);
+    let before;
+    try {
+      await fs.mkdir(os.backupDir, { recursive: true });
+      before = await freePath(os.backupDir, backupName(new Date()).replace('.sql', '-before-restore.sql'));
+      await writeBackup(pool, before);
+    } catch (e) {
+      console.error('[ipc] backup:restore pre-restore backup', e);
+      return { ok: false, error: `Could not back up the current data first: ${e.message}. Nothing was changed.` };
+    }
+    const res = await restoreBackup(os.dbConfig, file);
+    if (!res.ok) return res;
+    sessions.clear(); // the users table was replaced: everyone logs in again
+    return { ok: true, data: { file: path.basename(file), path: before } };
+  }],
   // Opens only the file this window just saved: a renderer-supplied path could launch anything.
   'records:openExport': ['ready', async ({ id, os, exported }) => {
     const file = exported.get(id);
@@ -115,10 +154,12 @@ const ROUTES = {
 // preload.cjs keeps its own copy of this list (a sandboxed preload cannot import ESM); ipc.test.js checks they match.
 export const CHANNELS = Object.keys(ROUTES);
 
-// os = { showSaveDialog(opts), openPath(file), documentsDir }: Electron's dialog/shell, injected so tests can fake them.
+// os = { showSaveDialog(opts), openPath(file), documentsDir, chooseFolder(), chooseBackupFile(), backupDir, dbConfig }:
+// Electron's dialog/shell and paths, injected so tests can fake them.
 export function registerIpc(ipcMain, pool, os = {}) {
   const sessions = new Map(); // webContents id → User; lives only in the main process
   const exported = new Map(); // webContents id → last file saved by records:print or reports:export
+  const picked = new Map(); // webContents id → backup file chosen in backup:pick
   for (const [channel, [access, fn]] of Object.entries(ROUTES)) {
     ipcMain.handle(channel, async (event, payload) => {
       const id = event.sender.id;
@@ -126,7 +167,7 @@ export function registerIpc(ipcMain, pool, os = {}) {
       if (access !== 'public' && !user) return { ok: false, error: 'Not logged in' };
       if (access === 'ready' && user.mustChangePassword) return { ok: false, error: 'Change your password first' };
       try {
-        return await fn({ pool, sessions, id, user, p: payload ?? {}, os, exported });
+        return await fn({ pool, sessions, id, user, p: payload ?? {}, os, exported, picked });
       } catch (e) {
         console.error(`[ipc] ${channel}`, e);
         return { ok: false, error: 'Something went wrong. Please try again.' };
