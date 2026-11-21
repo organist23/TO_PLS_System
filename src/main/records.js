@@ -8,7 +8,7 @@ export const formatNumber = (issuingOffice, period, seq) => `${issuingOffice ===
 export const periodOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 
 // 'YYYY-MM-DD' that is a real calendar date.
-const isDate = (s) => {
+export const isDate = (s) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s ?? '')) return false;
   const [y, m, d] = s.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
