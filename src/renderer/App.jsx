@@ -19,8 +19,9 @@ const PAGES = {
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = still checking the session
-  const [{ page, params }, setNav] = useState({ page: 'employees', params: {} });
-  const go = (p, prm = {}) => setNav({ page: p, params: prm });
+  const [{ page, params, seq }, setNav] = useState({ page: 'employees', params: {}, seq: 0 });
+  // Every navigation remounts the page, so a nav click always shows the page fresh (e.g. Records list, not a detail).
+  const go = (p, prm = {}) => setNav((n) => ({ page: p, params: prm, seq: n.seq + 1 }));
 
   useEffect(() => {
     if (!dbError) window.api.invoke('auth:me').then((res) => setUser(res.ok ? res.data : null));
@@ -67,7 +68,7 @@ export default function App() {
           </button>
         </header>
         <main className="mx-auto max-w-5xl p-8">
-          <Page key={`${page}:${params.mode ?? ''}:${params.id ?? ''}:${params.openId ?? ''}`} params={params} go={go} />
+          <Page key={seq} params={params} go={go} />
         </main>
       </div>
     </div>

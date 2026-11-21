@@ -252,9 +252,10 @@ export async function listRecords(pool, { search = '', formType = '', issuingOff
     where.push('r.issuing_office = ?');
     params.push(issuingOffice);
   }
-  if (officeId) {
+  const oid = Number(officeId) || 0; // a non-numeric id from IPC means no filter, never NaN in SQL
+  if (oid) {
     where.push('EXISTS (SELECT 1 FROM record_employees o WHERE o.record_id = r.id AND o.office_id = ?)');
-    params.push(Number(officeId));
+    params.push(oid);
   }
   // Overlap with the travel dates; a blank has NULL dates, so it never matches a range.
   if (from) {

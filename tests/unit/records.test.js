@@ -303,6 +303,7 @@ test('listRecords form, issuing office and employee office filters', async () =>
   expect(await numbers({ issuingOffice: 'SB' })).toEqual(['SB 2026-11-1']);
   expect(await numbers({ officeId: s.rhu })).toEqual(['SB 2026-11-1']);
   expect(await numbers({ officeId: ids.officeId })).toEqual(['2026-11-1']);
+  expect(await numbers({ officeId: 'x' })).toEqual(['2026-11-2', 'SB 2026-11-1', '2026-11-1']);
 });
 
 test('listRecords travel-date range overlaps inclusive dates; blanks never match', async () => {

@@ -22,6 +22,7 @@ export default function Records({ params = {}, go }) {
   const [acting, setActing] = useState({ pending: false, error: '' });
   const { print, printing, resetPrinting, openFile, dialog: previewDialog } = usePrint();
   const listSeq = useRef(0);
+  const detailSeq = useRef(0); // a detail still loading after Back to list or another Open is dropped
 
   useEffect(() => {
     const t = setTimeout(() => setQuery(filters), 250);
@@ -47,10 +48,12 @@ export default function Records({ params = {}, go }) {
   useEffect(() => void loadOffices(), [loadOffices]);
 
   const openRecord = useCallback(async (id) => {
+    const seq = ++detailSeq.current;
     setDetail({ status: 'loading', id });
     setActing({ pending: false, error: '' });
     resetPrinting();
     const res = await window.api.invoke('records:get', { id });
+    if (seq !== detailSeq.current) return;
     setDetail(res.ok ? { status: 'ready', id, rec: res.data } : { status: 'error', id, error: res.error });
     window.scrollTo(0, 0);
   }, []); // resetPrinting only calls a state setter
@@ -59,6 +62,7 @@ export default function Records({ params = {}, go }) {
   }, [params.openId, openRecord]);
 
   function backToList() {
+    detailSeq.current++;
     setDetail(null);
     setNotice('');
     loadList();

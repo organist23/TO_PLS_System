@@ -141,6 +141,18 @@ test.describe('US-8 Edit a record', () => {
     await expect(page.getByText('GLENDA P. MINA — SB SECRETARY')).toBeVisible();
     await button('Cancel').click();
     await expect(page.getByRole('heading', { name: `TO SB ${m}-1` })).toBeVisible();
+    // filling in from Records returns to the record, now Filled, with the same number
+    await button('Fill in').click();
+    await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Carla Diaz — MHO' });
+    await button('Add').click();
+    await page.getByLabel('Destination').fill('Manila');
+    await page.getByLabel('Departure').fill('2026-11-20T08:00');
+    await page.getByLabel('Purpose').fill('Seminar');
+    await button('Save').click();
+    await expect(page.getByRole('status')).toHaveText(`Saved TO SB ${m}-1`);
+    await expect(page.getByRole('heading', { name: `TO SB ${m}-1` })).toBeVisible();
+    await expect(page.locator('dl').getByText('Filled', { exact: true })).toBeVisible();
+    await expect(button('Edit')).toBeVisible();
   });
 
   test('Cancel leaves the record unchanged', async () => {

@@ -152,7 +152,8 @@ export default function NewRecord({ params = {}, go }) {
     if (res.overlaps) return setOverlaps(res.overlaps);
     setOverlaps(null);
     if (!res.ok) return res.errors ? setErrors(res.errors) : setFormError(res.error);
-    if (editing) return go('records', { openId: editing.id, notice: `Saved ${res.data.formType} ${res.data.number}` });
+    // Opened from Records: return to the record, where Print is.
+    if (editing || params.mode) return go('records', { openId: res.data.id, notice: `Saved ${res.data.formType} ${res.data.number}` });
     setNotice(`Saved ${res.data.formType} ${res.data.number}`);
     setSaved(res.data);
     setForm((f) => ({ ...f, ...blankDetails() }));

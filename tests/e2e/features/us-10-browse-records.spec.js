@@ -104,5 +104,10 @@ test.describe('US-10 Browse, search, and filter records', () => {
     for (const name of ['Edit', 'Print', 'Archive']) await expect(page.getByRole('button', { name, exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Back to list' }).click();
     await expect(listNumbers(page)).toHaveText(all());
+    // the Records nav item also leaves a detail for the list
+    await page.getByRole('button', { name: `Open SB ${m}-1` }).click();
+    await expect(page.getByRole('heading', { name: `TO SB ${m}-1` })).toBeVisible();
+    await page.getByRole('navigation').getByRole('button', { name: 'Records' }).click();
+    await expect(listNumbers(page)).toHaveText(all());
   });
 });
