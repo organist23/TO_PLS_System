@@ -279,7 +279,7 @@ test('records:print refuses a stack with an archived record, and more than 50 id
   const { ids } = (await c('records:issueBlank', { formType: 'PLS', issuingOffice: 'MAYOR', approvingId: appr, count: 2 })).data;
   await c('records:archive', { id: ids[1] });
   expect(await c('records:print', { ids })).toEqual({ ok: false, error: 'Restore this record before printing.' });
-  expect(await c('records:print', { ids: Array(51).fill(ids[0]) })).toEqual({ ok: false, error: 'Choose 1 to 50 forms to print.' });
+  expect(await c('records:print', { ids: Array.from({ length: 51 }, (_, i) => i + 1) })).toEqual({ ok: false, error: 'Choose 1 to 50 forms to print.' });
   expect(dialogs).toHaveLength(0);
 });
 
@@ -290,4 +290,13 @@ test('unused blanks of the current month are listed nowhere and cannot be delete
   const d = new Date();
   const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   expect(await c('records:deleteUnusedBlanks', { period })).toEqual({ ok: false, error: 'Only blanks of a past month can be deleted.' });
+});
+
+test('records:print with the same id twice prints it once', async () => {
+  const { c, recordId, fsMod } = await printSetup();
+  const res = await c('records:print', { ids: [recordId, recordId] });
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(fsMod.readFileSync(res.data.path));
+  expect(wb.worksheets).toHaveLength(1);
 });

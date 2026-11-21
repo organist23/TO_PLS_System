@@ -598,3 +598,14 @@ test('after deleting a past month, the current month keeps counting from its own
   await deleteUnusedBlanks(pool, { period: '2026-10' }, { now: NOV });
   expect(await numberOf({})).toBe('2026-11-3');
 });
+
+test('findBlank ignores leading zeros in the last part of the number', async () => {
+  const [, , third] = (await stack()).data.ids; // 2026-11-1..3
+  expect((await find('PLS', '2026-11-03')).data.id).toBe(third);
+  expect((await find('PLS', '2026-11-003')).data.id).toBe(third);
+  expect(await find('PLS', '2026-1-3')).toEqual(NOT_FOUND); // the month part is not touched
+});
+
+test('nextNumbers without a payload is refused, not thrown', async () => {
+  expect(await nextNumbers(pool)).toEqual({ ok: false, error: 'Choose the form and office' });
+});

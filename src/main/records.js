@@ -200,7 +200,7 @@ export async function issueBlank(pool, input, ctx) {
 }
 
 // The numbers a stack would get now. An estimate for the confirmation: another save can take them first.
-export async function nextNumbers(pool, { formType, issuingOffice, count = 1 }, { now = new Date() } = {}) {
+export async function nextNumbers(pool, { formType, issuingOffice, count = 1 } = {}, { now = new Date() } = {}) {
   if (!FORM_TYPES.includes(formType) || !ISSUING_OFFICES[issuingOffice]) return { ok: false, error: 'Choose the form and office' };
   const n = stackCount(count) || 1;
   const period = periodOf(now);
@@ -226,7 +226,8 @@ const NOT_FOUND = { ok: false, error: 'No blank form has this number. Check the 
 
 // US-17: the number printed on a returned form. PLS and TO keep separate counters, so the form type is part of the key.
 export async function findBlank(pool, { formType, number } = {}) {
-  const key = String(number ?? '').replace(/\s+/g, '').toUpperCase();
+  // '2026-11-03' is the same paper as '2026-11-3': drop leading zeros of the last part only (the month keeps its zero).
+  const key = String(number ?? '').replace(/\s+/g, '').toUpperCase().replace(/-0+(\d+)$/, '-$1');
   if (!FORM_TYPES.includes(formType) || !key) return NOT_FOUND;
   const [[row]] = await pool.query(
     `SELECT ${BLANK_COLUMNS}, status, archived_at IS NOT NULL AS archived

@@ -86,7 +86,7 @@ const ROUTES = {
   }],
   // { id } for one form, { ids } for a stack (US-16): one file, one sheet per form.
   'records:print': ['ready', async (ctx) => {
-    const ids = Array.isArray(ctx.p.ids) ? ctx.p.ids : [ctx.p.id];
+    const ids = Array.isArray(ctx.p.ids) ? [...new Set(ctx.p.ids.map(Number))] : [ctx.p.id];
     if (ids.length < 1 || ids.length > 50) return { ok: false, error: 'Choose 1 to 50 forms to print.' };
     const records = [];
     for (const id of ids) {

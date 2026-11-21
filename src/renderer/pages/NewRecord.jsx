@@ -58,6 +58,7 @@ export default function NewRecord({ params = {}, go }) {
   const [months, setMonths] = useState([]); // past months with unused blanks (US-18)
   const [deleting, setDeleting] = useState(null); // { period, count, pending, error }
   const busy = useRef(false);
+  const estimateSeq = useRef(0); // a slower estimate for an earlier count must not replace the current one
 
   const loadBlanks = useCallback(async () => {
     setBlanks((b) => ({ ...b, status: 'loading' }));
@@ -175,10 +176,14 @@ export default function NewRecord({ params = {}, go }) {
 
   // The confirmation shows the numbers the stack would get; the server assigns the real ones (US-16).
   async function openIssue() {
+    const n = Number(issueCount);
+    if (!(Number.isInteger(n) && n >= 1 && n <= 50)) return setErrors({ count: 'Enter a number from 1 to 50' });
+    setErrors({});
     setIssueOpen(true);
     setEstimate('loading');
-    const res = await window.api.invoke('records:nextNumbers', { formType: form.formType, issuingOffice: form.issuingOffice, count: issueCount });
-    setEstimate(res.ok ? res.data : { error: res.error });
+    const seq = ++estimateSeq.current;
+    const res = await window.api.invoke('records:nextNumbers', { formType: form.formType, issuingOffice: form.issuingOffice, count: n });
+    if (seq === estimateSeq.current) setEstimate(res.ok ? res.data : { error: res.error });
   }
 
   async function issueBlank() {
@@ -363,6 +368,9 @@ export default function NewRecord({ params = {}, go }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Recommending approval" id="rec-recommendingId" error={errors.recommendingId}>
             <select {...field('recommendingId')}><option value="">Choose a signatory</option>{signatoryOptions('recommending')}</select>
+            {mayorStack && (
+              <p className="mt-1 text-sm text-slate-600">Not printed on Mayor's Office blank forms: the Department Head signs the paper.</p>
+            )}
             {signatoryOptions('recommending').length === 0 && (
               <p className="mt-1 text-sm text-slate-600">No active recommending signatories. Add them on Signatories.</p>
             )}

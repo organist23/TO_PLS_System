@@ -35,6 +35,7 @@ test.describe('US-16 Print a stack of blank forms', () => {
   test('the confirmation names count, numbers and the chosen signatories before anything is reserved; Cancel reserves nothing', async () => {
     await seedRecord(page, seed); // <m>-1 already used
     await page.getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' }); // e.g. an Acting Mayor
+    await expect(page.getByText("Not printed on Mayor's Office blank forms: the Department Head signs the paper.")).toBeVisible();
     await page.getByLabel('How many').fill('5');
     await button('Issue blank form').click();
     const dialog = page.getByRole('dialog', { name: "Issue 5 blank PLS for Mayor's Office?" });
@@ -73,8 +74,8 @@ test.describe('US-16 Print a stack of blank forms', () => {
     for (const n of ['0', '51']) {
       await page.getByLabel('How many').fill(n);
       await button('Issue blank form').click();
-      await page.getByRole('dialog').getByRole('button', { name: /^Issue \d+ blanks$|^Issue blank$/ }).click();
       await expect(page.locator('#rec-count-error')).toHaveText('Enter a number from 1 to 50');
+      await expect(page.getByRole('dialog')).toHaveCount(0); // refused before the confirmation, so it never shows a wrong range
     }
     expect(await count()).toBe(0);
   });
