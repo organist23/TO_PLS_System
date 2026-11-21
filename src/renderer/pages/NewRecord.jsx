@@ -164,6 +164,7 @@ export default function NewRecord() {
 
   function startFill(b) {
     setFilling(b);
+    setPrinting({ pending: false, path: '', error: '' });
     setForm((f) => ({ ...f, ...blankDetails(), formType: b.formType, issuingOffice: b.issuingOffice }));
     setErrors({});
     setFormError('');
@@ -174,6 +175,7 @@ export default function NewRecord() {
 
   function cancelFill() {
     setFilling(null);
+    setPrinting({ pending: false, path: '', error: '' });
     setErrors({});
     setForm((f) => ({ ...f, ...blankDetails() }));
   }
@@ -320,7 +322,7 @@ export default function NewRecord() {
                   <td className="space-x-4 px-4 py-3 text-right whitespace-nowrap">
                     <button className={btn.link} aria-label={`Fill in ${b.number}`} onClick={() => startFill(b)}>Fill in</button>
                     <button className={btn.link} aria-label={`Print again ${b.number}`} disabled={printing.pending}
-                      onClick={() => { setSaved({ id: b.id, number: b.number, formType: b.formType }); print(b.id); }}>Print again</button>
+                      onClick={() => { setNotice(''); setSaved({ id: b.id, number: b.number, formType: b.formType }); print(b.id); }}>Print again</button>
                   </td>
                 </tr>
               ))}

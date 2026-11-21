@@ -8,10 +8,10 @@ Database: `pls_to_test` on local WAMP MySQL 5.7.26. `pls_to` not touched.
 
 ```
 Feature: Phase 2, US-6, US-7 (+ US-5 purpose limit)
-Feature tests: unit and integration (101, Vitest) incl. migrations, records.js (shared counter, blank, fill, purpose), print.js, ipc routes. E2E for US-6, US-7, US-5 purpose
+Feature tests: unit and integration (103, Vitest) incl. migrations, records.js (shared counter, blank, fill, purpose), print.js, ipc routes. E2E for US-6, US-7, US-5 purpose
 Regression E2E: US-5 (createRecord moved onto the shared counter), US-4 (New record signatory selects), US-1 and US-3 — all via the full run
 System E2E: CW-1 (US-1 → US-3 → US-4 → US-5 → US-6), first run
-Full E2E run: yes, schema change (records.status, nullable date columns, schema_version) — 62/62
+Full E2E run: yes, schema change (records.status, nullable date columns, schema_version) — 63/63
 ```
 
 ## US-6 Print a filled form as .xlsx — `tests/e2e/features/us-6-print.spec.js` — PASS 6/6
@@ -25,7 +25,7 @@ Full E2E run: yes, schema change (records.status, nullable date columns, schema_
 | Failed save shows the exact error, record unchanged | PASS |
 | Archived record cannot be printed | PASS |
 
-## US-7 Issue a numbered blank form — `tests/e2e/features/us-7-blank-forms.spec.js` — PASS 5/5
+## US-7 Issue a numbered blank form — `tests/e2e/features/us-7-blank-forms.spec.js` — PASS 6/6
 
 | Condition | Result |
 |---|---|
@@ -34,6 +34,7 @@ Full E2E run: yes, schema change (records.status, nullable date columns, schema_
 | Listed under Blank forms to fill with Fill in / Print again | PASS |
 | Fill in: form, office, signatories locked as printed; number kept; status filled; list empties | PASS |
 | Filling in applies the overlap warning | PASS |
+| Print again shows no banner about another record and prints the blank (review fix) | PASS |
 
 ## US-5 purpose limit — PASS 1/1. CW-1 — PASS 1/1.
 
@@ -61,3 +62,9 @@ Intermittent 5-10 s timeouts (2 of 5 unit runs) traced to per-test `DROP/CREATE 
 ## Left behind
 
 Nothing outside `pls_to_test`. Temp .xlsx files from tests in the OS temp folder.
+
+## Review fixes (step 10), each RED → GREEN
+
+- Important: long-word purposes (e.g. 17-char words, 359 chars) left line 4 longer than it fits. The overflowing line now shrinks (min 8 pt) (`print.test.js`).
+- Minor re-graded Important: a crash between the v2 ALTER and the version update made every later start fail. The migration now treats a duplicate column as already applied (`db.test.js`).
+- Minor re-graded Important: "Print again" left a banner naming a different record. Banners are cleared on Print again and when entering/leaving fill mode (`us-7-blank-forms.spec.js`).

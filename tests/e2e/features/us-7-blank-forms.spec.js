@@ -89,6 +89,24 @@ test.describe('US-7 Issue a numbered blank form', () => {
     await expect(blanksTable()).toContainText('No blank forms waiting');
   });
 
+  test('Print again shows no banner about another record and prints the blank', async () => {
+    await issue(); // blank <ym>-1
+    await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Ana Cruz — MHO' });
+    await button('Add').click();
+    await page.getByLabel('Destination').fill('Capitol');
+    await page.getByLabel('Departure').fill('2026-11-21T08:00');
+    await page.getByLabel('Purpose').fill('Meeting');
+    await button('Save').click();
+    await expect(page.getByRole('status')).toHaveText(`Saved PLS ${thisMonth()}-2`);
+
+    await blanksTable().getByRole('button', { name: `Print again ${thisMonth()}-1` }).click();
+    await expect(page.getByText(`Saved to ${file}`)).toBeVisible();
+    await expect(page.getByRole('status')).toHaveCount(0);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(file);
+    expect(wb.worksheets[0].getCell('A12').text).toBe(`PLS NO: ${thisMonth()}-1`);
+  });
+
   test('filling in applies the overlap warning', async () => {
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Ana Cruz — MHO' });
     await button('Add').click();

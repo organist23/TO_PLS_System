@@ -78,3 +78,15 @@ test('tables are utf8mb4 even inside a pre-existing latin1 database', async () =
   await p.end();
   expect(rows.map((r) => r.c)).toEqual(Array(8).fill('utf8mb4_unicode_ci'));
 });
+
+test('a migration interrupted after its ALTER (version not yet updated) completes on the next start', async () => {
+  const p = await freshTestDb(); // v2 schema, status column present
+  try {
+    await p.query('UPDATE schema_version SET version = 1'); // crash happened before the version update
+    await expect(migrate(testConfig())).resolves.toBeUndefined();
+    const [[{ version }]] = await p.query('SELECT version FROM schema_version');
+    expect(version).toBe(2);
+  } finally {
+    await p.end();
+  }
+});

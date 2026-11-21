@@ -136,3 +136,14 @@ test('long inclusive, destination and vehicle values shrink to fit their space (
   const short = await read(await buildWorkbook(record('PLS', 'MAYOR')));
   expect(short.getCell('A21').font.size).toBe(12); // template size kept when it fits
 });
+
+test('long-word purposes within 360 chars shrink the overflowing line instead of running off the page', async () => {
+  const purpose = Array.from({ length: 20 }, (_, i) => `abcdefghijklmno${String(i).padStart(2, '0')}`).join(' ').slice(0, 359); // 17-char words
+  expect(purpose.length).toBe(359);
+  const lines = wrapPurpose(purpose);
+  expect(lines[3].length).toBeGreaterThan(104); // greedy wrap leaves line 4 too long at 11 pt
+  const ws = await read(await buildWorkbook(record('PLS', 'MAYOR', { purpose })));
+  // line 4 = A27; floor(11 * 104 / length) — hand-derived from the line length above
+  expect(ws.getCell('A27').font.size).toBe(Math.max(8, Math.floor((11 * 104) / lines[3].length)));
+  expect(ws.getCell('A25').font.size).toBe(11);
+});

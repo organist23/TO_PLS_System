@@ -131,7 +131,9 @@ export async function buildWorkbook(record) {
       const c = ws.getCell(`A${layout.purposeRow + i}`);
       if (i === 0) labelled(c, line);
       else c.value = line || null;
-      restyle(c, { font: { ...c.font, size: PURPOSE_SIZE } });
+      // Long words can leave a line longer than its width; shrink that line rather than let it run off the page.
+      const size = Math.max(8, Math.min(PURPOSE_SIZE, Math.floor((PURPOSE_SIZE * WIDTHS[i]) / Math.max(line.length, 1))));
+      restyle(c, { font: { ...c.font, size } });
     });
   }
   return Buffer.from(await wb.xlsx.writeBuffer());

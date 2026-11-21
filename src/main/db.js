@@ -44,7 +44,15 @@ export async function migrate(config) {
       row = { version: 1 };
     }
     for (let v = row.version + 1; v <= MIGRATIONS.length + 1; v++) {
-      for (const sql of MIGRATIONS[v - 2]) await conn.query(sql);
+      for (const sql of MIGRATIONS[v - 2]) {
+        try {
+          await conn.query(sql);
+        } catch (e) {
+          // One ALTER statement applies fully or not at all, so a duplicate column means it already ran
+          // before a crash stopped the version update below.
+          if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+        }
+      }
       await conn.query('UPDATE schema_version SET version = ?', [v]);
     }
   } finally {
