@@ -167,14 +167,20 @@ Picked up from Phase 2: `migrate` and `MIGRATIONS`, now also run on a restored d
 
 Conventions later phases inherit: a new table must be added to `TABLES` in `backup.js` (parents before children) and, if it has foreign keys, to `ORPHANS`, or backups will not carry it. Backup files start with `-- PLS-TO Records System backup v1 schema <n>` and end with `-- end of backup`; restore accepts only the statement shapes `writeBackup` emits, on `TABLES`. A restore never touches live tables before the single `RENAME TABLE` swap. Files the user picks are remembered in the main process (`exported`, `picked`); a renderer-supplied path is never opened or restored. E2E sets `PLS_TO_BACKUP_DIR` to a temp folder and stubs `dialog.showOpenDialog` with `mockOpenDialog`.
 
-### Phase 6 — User account management NEXT
+### Phase 6 — User account management ✅ DONE (merged `34256e9`, 2026-11-21)
 
 Reopens Phase 5: US-14 restore becomes admin-only (user decision 2026-11-21).
-Covers US-2 (changed), US-14 (changed).
+Covers US-2 (changed), US-14 (changed). User decisions 2026-11-21: a reset password is temporary and changed at the next login; restore is admin-only, backup stays open to encoders.
 
 - Admin adds encoders, resets passwords (temporary, changed at next login), disables and re-enables accounts.
 - An `admin` access level for IPC routes; Users page and Restore visible to admins only.
 
-**Done when:** in the packaged app, an admin adds an encoder, the encoder logs in and sees no Users page and no Restore; the admin resets the encoder's password and the encoder must change it at the next login; the admin disables the encoder, whose open session ends and who cannot log in, then re-enables them; the admin cannot disable themselves or the last active admin. Every US-2 and US-14 condition passes, and the full E2E suite passes (end of Part two).
+**Done when:** in the packaged app, an admin adds an encoder, the encoder logs in and sees no Users page and no Restore; the admin resets the encoder's password and the encoder must change it at the next login; the admin disables the encoder, whose open session ends and who cannot log in, then re-enables them; the admin cannot disable themselves or the last active admin. Every US-2 and US-14 condition passes, and the full E2E suite passes (end of Part two). — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe: all US-2 conditions and the US-14 encoder condition; unit: admin routes refused for encoders, sessions ended on disable and reset, last active admin kept even under a concurrent disable (129/129 full E2E, 201/201 unit). Results: `docs/test-results/PHASE-6-TEST-RESULTS.md`. Regression: full suite (permission rule, sessions, end of Part two), all stories and CW-1 to CW-4 pass.
 
-Deliberately not built, and why: editing a user's name or role, and deleting users, because US-2 asks for neither.
+Shipped as `src/main/users.js`: `USER_ROLES`, `listUsers`, `createUser`, `resetPassword`, `setActive`. `src/main/auth.js`: `passwordError`, `login` (trims the username). `src/main/ipc.js`: access level `admin`, routes `users:list`, `users:create`, `users:resetPassword`, `users:setActive`, `backup:pick` and `backup:restore` now `admin`, `endSessionsOf`. `src/renderer/pages/Users.jsx`. `src/renderer/App.jsx` (admin-only menu entries, `user` passed to pages). `src/renderer/pages/Backup.jsx` (Restore for admins only). Tables: none (users existed since Phase 0).
+
+Deliberately not built, and why: editing a user's name or role, and deleting users, because US-2 asks for neither. Sending a disabled user's screen back to Login, because the app has one window and a disable can only end someone else's session. Rejecting whitespace-only passwords, because that changes the US-1 rule (user's decision).
+
+Picked up from Phase 0: sessions in the main process, the US-1 change-password screen for `must_change_password`. Picked up from Phase 5: restore clears all sessions; now admin-only.
+
+Conventions later phases inherit: an admin-only route uses access level `admin` (it also requires a changed password); the role is read from the server-side session, never from the payload. A page entry in `App.jsx` `PAGES` can carry a third element (`'admin'`) to show it to admins only. Changing a user's access (disable, reset) ends their sessions with `endSessionsOf`. User changes that can break the last-admin rule run in a transaction that locks the active admin rows.
