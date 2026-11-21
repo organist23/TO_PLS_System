@@ -4,7 +4,7 @@ import * as signatories from './signatories.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRecord, issueBlank, listBlank, fillBlank } from './records.js';
-import { getPrintable, buildWorkbook } from './print.js';
+import { getPrintable, buildWorkbook, previewOf } from './print.js';
 
 // Access levels: public, logged in (password change may be pending), ready (logged in, password changed).
 const ROUTES = {
@@ -50,6 +50,10 @@ const ROUTES = {
   'records:issueBlank': ['ready', ({ pool, user, p }) => issueBlank(pool, p, { userId: user.id })],
   'records:listBlank': ['ready', ({ pool }) => listBlank(pool)],
   'records:fillBlank': ['ready', ({ pool, user, p }) => fillBlank(pool, p, { userId: user.id })],
+  'records:preview': ['ready', async ({ pool, p }) => {
+    const rec = await getPrintable(pool, p.id);
+    return rec.ok ? { ok: true, data: await previewOf(rec.data) } : rec;
+  }],
   'records:print': ['ready', async ({ pool, id, p, os, exported }) => {
     const rec = await getPrintable(pool, p.id);
     if (!rec.ok) return rec;

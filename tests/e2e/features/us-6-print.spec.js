@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const ExcelJS = createRequire(import.meta.url)('exceljs'); // Playwright's ESM loader cannot import exceljs directly
-import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, openedPaths } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, openedPaths, saveFromPreview } from '../helpers.js';
 
 const readSheet = async (file) => {
   const wb = new ExcelJS.Workbook();
@@ -48,6 +48,7 @@ test.describe('US-6 Print a filled form as .xlsx', () => {
     await mockSaveDialog(app, file);
     await saveRecord();
     await button('Print').click();
+    await saveFromPreview(page);
     await expect(page.getByText(`Saved to ${file}`)).toBeVisible();
     const ws = await readSheet(file);
     const t = (a) => ws.getCell(a).text;
@@ -70,6 +71,7 @@ test.describe('US-6 Print a filled form as .xlsx', () => {
     await mockSaveDialog(app, file);
     await saveRecord();
     await button('Print').click();
+    await saveFromPreview(page);
     await expect(page.getByText(`Saved to ${file}`)).toBeVisible();
     const ws = await readSheet(file);
     expect(ws.getCell('F21').text).toBe('VEHICLE:');
@@ -82,6 +84,7 @@ test.describe('US-6 Print a filled form as .xlsx', () => {
     await mockSaveDialog(app, file);
     await saveRecord();
     await button('Print').click();
+    await saveFromPreview(page);
     await page.getByRole('button', { name: 'Open file' }).click();
     await expect.poll(() => openedPaths(app)).toEqual([file]);
   });
@@ -90,6 +93,7 @@ test.describe('US-6 Print a filled form as .xlsx', () => {
     await mockSaveDialog(app, null);
     await saveRecord();
     await button('Print').click();
+    await saveFromPreview(page);
     await expect(button('Print')).toBeEnabled();
     await expect(page.getByText(/Saved to/)).toHaveCount(0);
     expect(fs.readdirSync(dir)).toEqual([]);
@@ -100,6 +104,7 @@ test.describe('US-6 Print a filled form as .xlsx', () => {
     await saveRecord();
     const [[before]] = await pool.query('SELECT * FROM records');
     await button('Print').click();
+    await saveFromPreview(page);
     await expect(page.getByRole('alert')).toHaveText('Could not save the file. If it is open in Excel, close it and try again.');
     const [[after]] = await pool.query('SELECT * FROM records');
     expect(after).toEqual(before);

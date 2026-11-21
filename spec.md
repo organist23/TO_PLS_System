@@ -111,6 +111,7 @@ Changed 2026-11-21: purpose limited to 360 characters so it fits the 4 printed l
 - [ ] A purpose longer than 360 characters is rejected with "At most 360 characters".
 
 ### US-6: Print a filled form as .xlsx
+Changed 2026-11-21: Print opens the preview (US-15) before the save dialog (user request after Phase 2).
 Changed 2026-11-21: date and time formats, Mayor's TO prints the recommending signatory, where Print is offered, empty optional fields stay as blank lines (user decisions before Phase 2 plan).
 
 **As** HR staff, **I want** to print a record on the official PLS or TO layout, **so that** it can be signed on paper.
@@ -123,12 +124,14 @@ Changed 2026-11-21: date and time formats, Mayor's TO prints the recommending si
 - [ ] Every form prints both signatories' names and titles, including the Mayor's Office Travel Order, which uses the same layout as the SB forms (name, then title below).
 - [ ] An empty vehicle or return keeps the form's blank line for handwriting.
 - [ ] Print is offered right after a record is saved and for each blank form (US-7).
+- [ ] Print opens the preview first (US-15). The save dialog appears only after "Save as Excel".
 
 **Rejects when:**
 - [ ] An archived record cannot be printed until it is restored.
 - [ ] A failed save (e.g. file open in Excel) shows an error and does not change the record.
 
 ### US-7: Issue a numbered blank form
+Changed 2026-11-21: after issuing, the preview (US-15) opens before the save dialog (user request after Phase 2).
 Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories fixed when filling (user decisions before Phase 2 plan).
 
 **As** HR staff, **I want** to print a blank form that already has a number, **so that** an employee can fill it by hand while the number stays reserved.
@@ -147,36 +150,47 @@ Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories f
 - [ ] A Blank issued record does not appear in "who is out today" or office reports until it is filled.
 
 ### US-8: Edit a record
+Changed 2026-11-21: people already on a record stay valid when edited, overlap warning applies, blank forms are filled not edited (user decisions before Phase 3 plan).
+
 **As** HR staff, **I want** to fix a record's details, **so that** mistakes can be corrected.
 
 **Accepts when:**
 - [ ] Every field from US-5 can be edited except number, form type, and issuing office.
 - [ ] Save shows success and the new values appear in the list and on the next print.
+- [ ] Employees and signatories already on the record stay valid and keep their saved details even if archived since. Newly added ones must be active and are saved with their current details.
+- [ ] The US-5 overlap warning applies, ignoring the record being edited.
+- [ ] A Blank issued record is completed with "Fill in" (US-7), not Edit.
 
 **Rejects when:**
 - [ ] The same validation as US-5 applies.
 - [ ] Number, form type, and issuing office cannot be changed.
 
 ### US-9: Archive and restore a record
+Changed 2026-11-21: Blank issued forms can be archived too (user decision before Phase 3 plan).
+
 **As** HR staff, **I want** to archive a wrong or cancelled record, **so that** it leaves the active list without losing its number.
 
 **Accepts when:**
 - [ ] Archive asks for confirmation naming the record number. Cancel changes nothing.
 - [ ] An archived record is hidden from the default list, reports, and "out today".
 - [ ] The "Archived" filter shows archived records. Restore returns a record to the active list.
+- [ ] A Blank issued form can be archived (lost or spoiled paper). Its number stays reserved.
 
 **Rejects when:**
 - [ ] An archived record's number is never reused.
 - [ ] No permanent delete exists.
 
 ### US-10: Browse, search, and filter records
+Changed 2026-11-21: the date range filter matches travel (inclusive) dates; reprint from the record (user decision before Phase 3 plan).
+
 **As** HR staff, **I want** to find records quickly, **so that** I can view, edit, or reprint them.
 
 **Accepts when:**
 - [ ] The list shows number, form type, issuing office, names, destination, and inclusive dates, newest first.
 - [ ] Search matches number, employee name, destination, or purpose.
 - [ ] Filters: form type, issuing office, employee office, date range, status (Filled, Blank issued, Archived).
-- [ ] Opening a record shows all its details.
+- [ ] Opening a record shows all its details, with Edit, Print, and Archive or Restore.
+- [ ] The date range filter shows records whose inclusive dates overlap the range.
 
 **Rejects when:**
 - [ ] A search with no results shows "No records found", not an empty table.
@@ -224,6 +238,21 @@ Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories f
 
 **Rejects when:**
 - [ ] A file that is not a valid backup of this app is rejected and current data is unchanged.
+
+### US-15: Preview a form before saving it
+**As** HR staff, **I want** to see the filled PLS or TO form on screen before saving it, **so that** I can check names, designations, dates, and signatories before it is printed.
+
+**Accepts when:**
+- [ ] Print, Print again, and Issue blank (after its confirmation) open an on-screen preview of the form, drawn from the same template as the .xlsx: logo, lines, fonts, and every filled cell.
+- [ ] The preview shows the same values the .xlsx will contain: number, date, names, designations, employment status, destination, dates, times, purpose, and both signatories.
+- [ ] "Save as Excel" continues to the save dialog and the US-6 flow. "Close" or Escape returns with nothing saved.
+- [ ] The preview shows "Preparing preview…" while it loads, and an error message if it fails.
+
+**Rejects when:**
+- [ ] An archived record cannot be previewed ("Restore this record before printing.").
+- [ ] An unsaved form cannot be previewed, because its number does not exist yet.
+- [ ] Closing the preview writes no file.
+- [ ] Text typed into a record shows as plain text in the preview and never runs as page code.
 
 ## Critical workflows
 - CW-1: Issue and print a record: US-1 → US-3 → US-4 → US-5 → US-6

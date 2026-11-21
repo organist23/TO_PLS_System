@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { btn, inputClass, Field, Banner } from '../components/ui.jsx';
 import ConfirmDialog from '../components/ConfirmDialog.jsx';
+import FormPreview from '../components/FormPreview.jsx';
 import { ISSUING_OFFICES } from '../../main/signatories.js';
 
 const MAX_EMPLOYEES = 5;
@@ -44,6 +45,10 @@ export default function NewRecord() {
   const [filling, setFilling] = useState(null); // blank record being filled in
   const [issueOpen, setIssueOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
+  const [preview, setPreview] = useState(null); // { id, number, formType, model }
+  const previewRef = useRef(null);
+  const previewSeq = useRef(0);
+  const saveButtonRef = useRef(null); // a preview closed while loading must not reopen when its result arrives
   const busy = useRef(false);
 
   const loadBlanks = useCallback(async () => {
@@ -52,6 +57,14 @@ export default function NewRecord() {
     setBlanks(res.ok ? { status: 'ready', rows: res.data } : { status: 'error', rows: [], error: res.error });
   }, []);
   useEffect(() => void loadBlanks(), [loadBlanks]);
+
+  useEffect(() => {
+    const d = previewRef.current;
+    if (!d) return;
+    if (preview && !d.open) d.showModal();
+    if (!preview && d.open) d.close();
+    if (preview?.model) saveButtonRef.current?.focus(); // the button was disabled while loading, so autoFocus missed it
+  }, [preview]);
 
   const load = useCallback(async () => {
     setLists({ status: 'loading' });
@@ -129,8 +142,31 @@ export default function NewRecord() {
     }
   }
 
-  async function print(id) {
+  // Print shows the preview first (US-15); Save as Excel continues to the save dialog.
+  async function print(rec) {
     setPrinting({ pending: true, path: '', error: '' });
+    const seq = ++previewSeq.current;
+    setPreview({ ...rec, model: null });
+    const res = await window.api.invoke('records:preview', { id: rec.id });
+    if (seq !== previewSeq.current) return;
+    if (!res.ok) {
+      setPreview(null);
+      return setPrinting({ pending: false, path: '', error: res.error });
+    }
+    setPreview({ ...rec, model: res.data });
+  }
+
+  // The dialog's own close event is the one place a closed preview is noticed: Chromium can close a modal
+  // dialog on Escape without firing cancel. A print error set before closing is kept.
+  function onPreviewClosed() {
+    previewSeq.current++;
+    setPreview(null);
+    setPrinting((p) => (p.error ? p : { pending: false, path: '', error: '' }));
+  }
+
+  async function saveFromPreview() {
+    const { id } = preview;
+    previewRef.current.close();
     const res = await window.api.invoke('records:print', { id });
     if (!res.ok) return setPrinting({ pending: false, path: '', error: res.error });
     setPrinting({ pending: false, path: res.data.canceled ? '' : res.data.path, error: '' });
@@ -159,7 +195,7 @@ export default function NewRecord() {
     setNotice(`Issued blank ${res.data.formType} ${res.data.number}`);
     setSaved(res.data);
     loadBlanks();
-    print(res.data.id);
+    print(res.data);
   }
 
   function startFill(b) {
@@ -193,7 +229,7 @@ export default function NewRecord() {
       {notice && <Banner kind="success">{notice}</Banner>}
       {saved && (
         <div className="flex items-center gap-3">
-          <button type="button" className={btn.secondary} disabled={printing.pending} onClick={() => print(saved.id)}>
+          <button type="button" className={btn.secondary} disabled={printing.pending} onClick={() => print(saved)}>
             {printing.pending ? 'Printing…' : 'Print'}
           </button>
           {printing.path && (
@@ -322,7 +358,7 @@ export default function NewRecord() {
                   <td className="space-x-4 px-4 py-3 text-right whitespace-nowrap">
                     <button className={btn.link} aria-label={`Fill in ${b.number}`} onClick={() => startFill(b)}>Fill in</button>
                     <button className={btn.link} aria-label={`Print again ${b.number}`} disabled={printing.pending}
-                      onClick={() => { setNotice(''); setSaved({ id: b.id, number: b.number, formType: b.formType }); print(b.id); }}>Print again</button>
+                      onClick={() => { const rec = { id: b.id, number: b.number, formType: b.formType }; setNotice(''); setSaved(rec); print(rec); }}>Print again</button>
                   </td>
                 </tr>
               ))}
@@ -330,6 +366,30 @@ export default function NewRecord() {
           </table>
         )}
       </section>
+
+      <dialog
+        ref={previewRef}
+        aria-labelledby="preview-title"
+        onClose={onPreviewClosed}
+        className="m-auto max-h-[90vh] w-full max-w-4xl overflow-auto rounded-md p-6 shadow-[0_15px_35px_hsla(0,0%,0%,.2)] backdrop:bg-slate-900/40"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <h2 id="preview-title" className="text-lg font-semibold text-slate-900">
+            Preview {preview?.formType} {preview?.number}
+          </h2>
+          {preview && (
+            <div className="flex gap-3">
+              <button type="button" className={btn.secondary} onClick={() => previewRef.current.close()}>Close</button>
+              <button type="button" ref={saveButtonRef} className={btn.primary} disabled={!preview.model} onClick={saveFromPreview}>
+                Save as Excel
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-100 p-4">
+          {preview?.model ? <FormPreview model={preview.model} /> : <p className="text-sm text-slate-600">Preparing preview…</p>}
+        </div>
+      </dialog>
 
       <ConfirmDialog
         open={issueOpen}

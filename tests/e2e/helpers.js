@@ -76,3 +76,9 @@ export const mockOpenPath = (app) =>
   });
 
 export const openedPaths = (app) => app.evaluate(() => globalThis.__opened);
+
+// Print/Issue blank open the preview first (US-15); this confirms it.
+export async function saveFromPreview(page) {
+  const preview = page.getByRole('dialog', { name: /^Preview / });
+  await preview.getByRole('button', { name: 'Save as Excel' }).click();
+}

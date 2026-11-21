@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import ExcelJS from 'exceljs';
-import { formatDate, formatRange, formatTime, wrapPurpose, buildWorkbook } from '../../src/main/print.js';
+import { formatDate, formatRange, formatTime, wrapPurpose, buildWorkbook, previewOf } from '../../src/main/print.js';
 
 test('formatDate', () => {
   expect(formatDate('2026-11-20')).toBe('November 20, 2026');
@@ -146,4 +146,50 @@ test('long-word purposes within 360 chars shrink the overflowing line instead of
   // line 4 = A27; floor(11 * 104 / length) — hand-derived from the line length above
   expect(ws.getCell('A27').font.size).toBe(Math.max(8, Math.floor((11 * 104) / lines[3].length)));
   expect(ws.getCell('A25').font.size).toBe(11);
+});
+
+// ---------- Phase 7: preview ----------
+
+const cellText = (c) => c.runs.map((r) => r.text).join('');
+const colLetter = (n) => String.fromCharCode(64 + n);
+
+test('previewOf: grid, title merge, number runs, name row, image', async () => {
+  const p = await previewOf(record('PLS', 'MAYOR'));
+  const tpl = new ExcelJS.Workbook();
+  await tpl.xlsx.readFile('src/main/templates/pls-mayor.xlsx');
+  expect(p.cols).toHaveLength(11);
+  expect(p.rows).toHaveLength(48);
+  expect(p.cols[2]).toBe(Math.round(tpl.worksheets[0].getColumn('C').width * 7 + 5));
+  const at = (row, col) => p.rows[row - 1].cells.find((c) => c.col === col);
+  expect(at(10, 1)).toMatchObject({ colSpan: 11, align: 'center' });
+  expect(cellText(at(10, 1))).toBe('PERSONNEL LOCATOR SLIP');
+  expect(at(10, 2)).toBeUndefined(); // covered by the merge
+  expect(at(12, 1).runs.map((r) => r.text)).toEqual(['PLS NO: ', '2026-11-', '7']);
+  expect(at(12, 1).runs.slice(1).every((r) => r.underline)).toBe(true);
+  expect([cellText(at(14, 1)), cellText(at(14, 5)), cellText(at(14, 8))]).toEqual(['MARIA PEÑA', 'Nurse I', 'Permanent']);
+  expect(at(14, 1).border.bottom).toBe(true);
+  expect(p.image.src.startsWith('data:image/')).toBe(true);
+  expect(p.image.top).toBe(Math.round(25977 / 9525)); // template anchor: row 0, rowOff 25977 EMU
+  expect(p.image.width).toBeGreaterThan(500);
+});
+
+test.each(['PLS-MAYOR', 'TO-MAYOR', 'PLS-SB', 'TO-SB'])('previewOf %s shows exactly the values of the saved file', async (key) => {
+  const [formType, office] = key.split('-');
+  const rec = record(formType, office, { vehicle: 'Service vehicle', return_at: '2026-11-22 17:00:00' });
+  const p = await previewOf(rec);
+  const ws = await read(await buildWorkbook(rec));
+  const fromPreview = {};
+  p.rows.forEach((row, r) => row.cells.forEach((c) => {
+    const t = cellText(c);
+    if (t.trim()) fromPreview[`${colLetter(c.col)}${r + 1}`] = t;
+  }));
+  const fromFile = {};
+  for (let r = 1; r <= p.rows.length; r++) {
+    for (let c = 1; c <= p.cols.length; c++) {
+      const cell = ws.getCell(r, c);
+      if (cell.isMerged && cell.master.address !== cell.address) continue;
+      if (cell.text.trim()) fromFile[cell.address] = cell.text;
+    }
+  }
+  expect(fromPreview).toEqual(fromFile);
 });

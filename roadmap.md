@@ -54,11 +54,30 @@ Picked up from Phase 1: numbers only from the shared counter (now `withCounter`)
 
 Conventions later phases inherit: schema changes are appended to `MIGRATIONS` in `db.js`, never by editing `schema.sql` (v1 snapshot); an ALTER must be safe to re-run. `records.status` is `filled` or `blank`; a blank has NULL dates, `''` destination/purpose and no `record_employees`, so every reader of records filters `status = 'filled'` where dates or people matter (out today, reports, overlaps). Printing reads the record snapshot through `getPrintable` + `buildWorkbook`; the template cell map lives in `print.js` `LAYOUTS`. A template update keeps one sheet named `Form`, fit to one A4 page, and no whitespace-only cells (unit test). Font changes in exceljs go through `restyle` (styles are shared between cells). Files the app opens are only those it just saved (`records:openExport`). Tests reset `pls_to_test` by deleting rows; a test that alters the schema restores it.
 
-### Phase 3 — Browse, edit, archive NEXT
+### Phase 3 — Browse, edit, archive LATER
 
+Paused 2026-11-21: print preview (Phase 7) first, at the user's request. Not started, no branch. Plan: `docs/superpowers/plans/2026-11-21-phase-3-browse-edit-archive.md`.
+Staff need to find, fix and void what Phases 1–2 create before monitoring and reports build on it.
 Covers US-8, US-9, US-10.
 
 - Search and filter records, edit details, archive and restore.
+- Reprint any active record from its detail view.
+
+**Done when:** in the packaged app, records are found by each search kind and filter, opened, edited (number, form and office unchanged), reprinted with the new values, archived and restored. Every US-8, US-9, US-10 condition passes, and the full E2E suite passes (end of Part one).
+
+Deliberately not built, and why: "out today" and per-office reports, because Phase 4 owns US-11 and US-12. An edit history, because no story asks for it.
+
+### Phase 7 — Print preview NEXT
+
+Reopens Phase 2: US-6 and US-7 print flow now opens the preview first (US-15) on 2026-11-21.
+HR asked to check the filled form on screen before saving it, ahead of browsing and editing.
+Covers US-15.
+
+- Print, Print again and Issue blank show the filled form on screen, then "Save as Excel" or "Close".
+
+**Done when:** in the packaged app, the preview of each of the 4 form kinds shows the hand-checked values in the template layout, "Save as Excel" produces the same .xlsx as before, and "Close" writes nothing. US-6, US-7, US-15 and CW-1 pass.
+
+Deliberately not built, and why: preview of unsaved forms (no number yet, user decision); pixel-exact rendering through Excel (needs Excel on every PC, user decision).
 
 ## Part two — Monitoring and data safety
 

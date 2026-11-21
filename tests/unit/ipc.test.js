@@ -181,3 +181,12 @@ test('blank-form routes issue, list and fill', async () => {
   expect(issued.data.number).toMatch(/^SB \d{4}-\d{2}-1$/);
   expect((await c('records:listBlank')).data.map((r) => r.id)).toEqual([issued.data.id]);
 });
+
+test('records:preview returns the form for a saved record and refuses an archived one', async () => {
+  const { c, recordId } = await printSetup();
+  const res = await c('records:preview', { id: recordId });
+  expect(res.ok).toBe(true);
+  expect(res.data.rows).toHaveLength(48);
+  await pool.query('UPDATE records SET archived_at = NOW()');
+  expect(await c('records:preview', { id: recordId })).toEqual({ ok: false, error: 'Restore this record before printing.' });
+});

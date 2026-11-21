@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { launchApp, loginAsChangedAdmin, thisMonth, mockSaveDialog } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, thisMonth, mockSaveDialog, saveFromPreview } from '../helpers.js';
 
 const ExcelJS = createRequire(import.meta.url)('exceljs');
 
@@ -54,6 +54,7 @@ test('CW-1 issue and print a record', async () => {
     await expect(page.getByRole('status')).toHaveText(`Saved PLS ${thisMonth()}-1`);
 
     await button('Print').click(); // US-6: the saved number and people reach the printed file
+    await saveFromPreview(page); // US-15
     await expect(page.getByText(`Saved to ${file}`)).toBeVisible();
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(file);
