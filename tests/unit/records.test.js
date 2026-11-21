@@ -3,7 +3,7 @@ import { freshTestDb, testConfig } from '../helpers/testDb.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee } from '../../src/main/directory.js';
 import { createSignatory, archiveSignatory, updateSignatory } from '../../src/main/signatories.js';
-import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord, issueBlanks, nextNumbers, findBlank, unusedBlankMonths, deleteUnusedBlanks } from '../../src/main/records.js';
+import { formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord, issueBlanks, nextNumbers, findBlank, unusedBlankMonths, deleteUnusedBlanks } from '../../src/main/records.js';
 
 let pool, ids;
 const NOV = new Date(2026, 10, 20, 9, 0);
@@ -29,7 +29,16 @@ const valid = (over = {}) => ({
   departureAt: '2026-11-20T08:00', returnAt: '', purpose: 'Submit reports',
   recommendingId: ids.rec, approvingId: ids.appr, ...over,
 });
-const create = (over, now = NOV) => createRecord(pool, valid(over), { userId: ids.userId, now });
+// Paper first (US-5 changed 2026-11-21): a record is an issued blank, then filled in.
+const issueFor = (v, now) => issueBlanks(pool, {
+  formType: v.formType, issuingOffice: v.issuingOffice, recommendingId: v.recommendingId, approvingId: v.approvingId, count: 1,
+}, { userId: ids.userId, now });
+async function create(over, now = NOV) {
+  const v = valid(over);
+  const issued = await issueFor(v, now);
+  return issued.ok ? fillBlank(pool, { ...v, id: issued.data.ids[0] }, { userId: ids.userId }) : issued;
+}
+const filledCount = async () => (await pool.query("SELECT COUNT(*) AS n FROM records WHERE status = 'filled'"))[0][0].n;
 const numberOf = async (over, now) => (await create(over, now)).data.number;
 const count = async () => (await pool.query('SELECT COUNT(*) AS n FROM records'))[0][0].n;
 
@@ -66,16 +75,22 @@ test('restore-safe: numbering continues after the highest stored seq', async () 
 });
 
 test('each missing required field says Required; nothing saved', async () => {
-  const res = await create({
-    destination: ' ', purpose: '', dateFiled: '', inclusiveFrom: '', inclusiveTo: '', departureAt: 'x',
-    recommendingId: null, approvingId: '', formType: 'XX', issuingOffice: null,
-  });
-  expect(res.errors).toEqual({
-    formType: 'Required', issuingOffice: 'Required', dateFiled: 'Required', destination: 'Required', purpose: 'Required',
-    inclusiveFrom: 'Required', inclusiveTo: 'Required', departureAt: 'Required',
-    recommendingId: 'Choose an active recommending signatory', approvingId: 'Choose an active approving signatory',
+  // Form, office and approver are checked when the blank is issued (US-16); nothing is reserved then.
+  expect((await issueFor({ formType: 'XX', issuingOffice: null, approvingId: '' }, NOV)).errors).toEqual({
+    formType: 'Required', issuingOffice: 'Required', approvingId: 'Choose an active approving signatory',
+    recommendingId: 'Choose an active recommending signatory', // no office given, so it may be an SB stack
   });
   expect(await count()).toBe(0);
+  // The details and the Department Head are checked when it is encoded; the blank stays blank.
+  const res = await create({
+    destination: ' ', purpose: '', dateFiled: '', inclusiveFrom: '', inclusiveTo: '', departureAt: 'x', recommendingId: null,
+  });
+  expect(res.errors).toEqual({
+    dateFiled: 'Required', destination: 'Required', purpose: 'Required',
+    inclusiveFrom: 'Required', inclusiveTo: 'Required', departureAt: 'Required',
+    recommendingId: 'Choose an active recommending signatory',
+  });
+  expect(await filledCount()).toBe(0);
 });
 
 test('vehicle and return optional', async () => {
@@ -91,7 +106,7 @@ test('employee list rules', async () => {
   await archiveEmployee(pool, { id: ids.emps[5] });
   expect((await create({ employeeIds: [ids.emps[5]] })).errors.employees).toBe('Choose active employees');
   expect((await create({ employeeIds: ids.emps.slice(0, 5) })).ok).toBe(true);
-  expect(await count()).toBe(1);
+  expect(await filledCount()).toBe(1);
 });
 
 test('date order rules', async () => {
@@ -120,13 +135,14 @@ test('snapshots survive later edits, in the given order', async () => {
 
 test('overlap warns, confirmOverlap saves', async () => {
   await create({ inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22' });
-  const res = await create({ inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' });
+  const [id] = (await issueFor(valid(), NOV)).data.ids; // the returned paper 2026-11-2
+  const res = await fill(id, { inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' });
   expect(res).toEqual({
     ok: false, error: 'Overlapping records',
     overlaps: [{ employeeName: 'Emp 1', formType: 'PLS', number: '2026-11-1', inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22' }],
   });
-  expect(await count()).toBe(1);
-  expect((await create({ inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21', confirmOverlap: true })).data.number).toBe('2026-11-2');
+  expect(await filledCount()).toBe(1);
+  expect((await fill(id, { inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21', confirmOverlap: true })).data.number).toBe('2026-11-2');
 });
 
 test('overlap edges: same last day overlaps, next day does not, other employee or archived does not', async () => {

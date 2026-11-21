@@ -4,7 +4,7 @@ import * as signatories from './signatories.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {
-  createRecord, issueBlanks, nextNumbers, listBlank, findBlank, unusedBlankMonths, deleteUnusedBlanks, fillBlank,
+  issueBlanks, nextNumbers, listBlank, findBlank, unusedBlankMonths, deleteUnusedBlanks, fillBlank,
   listRecords, getRecord, updateRecord, archiveRecord, restoreRecord,
 } from './records.js';
 import { getPrintable, buildStackWorkbook, previewOf } from './print.js';
@@ -72,7 +72,6 @@ const ROUTES = {
   'records:update': ['ready', ({ pool, p }) => updateRecord(pool, p)],
   'records:archive': ['ready', ({ pool, p }) => archiveRecord(pool, p)],
   'records:restore': ['ready', ({ pool, p }) => restoreRecord(pool, p)],
-  'records:create': ['ready', ({ pool, user, p }) => createRecord(pool, p, { userId: user.id })],
   'records:issueBlank': ['ready', ({ pool, user, p }) => issueBlanks(pool, { count: 1, ...p }, { userId: user.id })],
   'records:nextNumbers': ['ready', ({ pool, p }) => nextNumbers(pool, p)],
   'records:findBlank': ['ready', ({ pool, p }) => findBlank(pool, p)],

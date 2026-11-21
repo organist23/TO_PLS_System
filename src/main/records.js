@@ -143,32 +143,6 @@ const headerValues = (input, c, status, rec, appr, userId) => [
   rec?.id ?? null, rec?.name ?? null, rec?.title ?? null, appr.id, appr.name, appr.title, userId,
 ];
 
-export function createRecord(pool, input, { userId, now = new Date() }) {
-  return withConnection(pool, async (conn, held) => {
-    const errors = {};
-    const { recommending, approving } = await validateHeader(conn, input, errors);
-    const employees = await validateDetails(conn, input, errors);
-    if (Object.keys(errors).length) return fieldErrors(errors);
-
-    if (input.confirmOverlap !== true) {
-      const overlaps = await findOverlaps(conn, employees, input.inclusiveFrom, input.inclusiveTo);
-      if (overlaps.length) return { ok: false, error: 'Overlapping records', overlaps };
-    }
-
-    const [made] = await withCounter(conn, held, input.formType, input.issuingOffice, now, 1, async (c) => {
-      const [r] = await conn.query(
-        `INSERT INTO records (${HEADER_COLUMNS}, date_filed, destination, vehicle, inclusive_from, inclusive_to,
-           departure_at, return_at, purpose)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [...headerValues(input, c, 'filled', recommending, approving, userId), ...detailValues(input)],
-      );
-      await insertEmployees(conn, r.insertId, employees);
-      return r.insertId;
-    });
-    return { ok: true, data: { id: made.id, number: made.number, formType: input.formType } };
-  });
-}
-
 const MAX_STACK = 50;
 const stackCount = (v) => {
   const n = v === '' || v === null ? NaN : Number(v);

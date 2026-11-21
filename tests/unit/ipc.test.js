@@ -78,9 +78,15 @@ test('thrown error → generic message', async () => {
   }
 });
 
-test('records:create needs a changed password, then saves with the session user', async () => {
+test('records:create does not exist: a record starts as an issued blank (US-5 changed)', () => {
+  expect(CHANNELS).not.toContain('records:create');
+  const src = fs.readFileSync(new URL('../../src/main/preload.cjs', import.meta.url), 'utf8');
+  expect(src).not.toContain("'records:create'");
+});
+
+test('issuing needs a changed password, then saves with the session user', async () => {
   await call(1, 'auth:login', { username: 'admin', password: 'admin' });
-  expect(await call(1, 'records:create', {})).toEqual({ ok: false, error: 'Change your password first' });
+  expect(await call(1, 'records:issueBlank', {})).toEqual({ ok: false, error: 'Change your password first' });
   await call(1, 'auth:changePassword', { newPassword: 'Test-pass-123' });
   const officeId = (await call(1, 'offices:create', { name: 'MHO' })).data.id;
   const emp = (await call(1, 'employees:create', { fullName: 'Ana', employmentStatus: 'Casual', officeId })).data.id;
@@ -88,10 +94,10 @@ test('records:create needs a changed password, then saves with the session user'
   const appr = (await call(1, 'signatories:create', { name: 'A', title: 'MUNICIPAL MAYOR', role: 'approving' })).data.id;
   await call(1, 'signatories:setDefault', { issuingOffice: 'MAYOR', role: 'approving', signatoryId: appr });
   expect((await call(1, 'signatories:defaults')).data.MAYOR.approving).toBe(appr);
-  const res = await call(1, 'records:create', {
-    formType: 'TO', issuingOffice: 'MAYOR', dateFiled: '2026-11-20', employeeIds: [emp], destination: 'Capitol',
-    inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-20', departureAt: '2026-11-20T08:00', purpose: 'Meeting',
-    recommendingId: rec, approvingId: appr,
+  const issued = await call(1, 'records:issueBlank', { formType: 'TO', issuingOffice: 'MAYOR', approvingId: appr });
+  const res = await call(1, 'records:fillBlank', {
+    id: issued.data.ids[0], dateFiled: '2026-11-20', employeeIds: [emp], destination: 'Capitol',
+    inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-20', departureAt: '2026-11-20T08:00', purpose: 'Meeting', recommendingId: rec,
   });
   expect(res.data.number).toMatch(/^\d{4}-\d{2}-1$/);
   const [[row]] = await pool.query('SELECT created_by FROM records');
@@ -124,10 +130,10 @@ async function printSetup({ dialogResult } = {}) {
   const emp = (await c('employees:create', { fullName: 'Ana', employmentStatus: 'Casual', officeId })).data.id;
   const rec = (await c('signatories:create', { name: 'R', title: 'DEPARTMENT HEAD', role: 'recommending' })).data.id;
   const appr = (await c('signatories:create', { name: 'A', title: 'MUNICIPAL MAYOR', role: 'approving' })).data.id;
-  const saved = await c('records:create', {
-    formType: 'PLS', issuingOffice: 'MAYOR', dateFiled: '2026-11-20', employeeIds: [emp], destination: 'Capitol',
-    inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-20', departureAt: '2026-11-20T08:00', purpose: 'Meeting',
-    recommendingId: rec, approvingId: appr,
+  const issued = await c('records:issueBlank', { formType: 'PLS', issuingOffice: 'MAYOR', approvingId: appr });
+  const saved = await c('records:fillBlank', {
+    id: issued.data.ids[0], dateFiled: '2026-11-20', employeeIds: [emp], destination: 'Capitol',
+    inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-20', departureAt: '2026-11-20T08:00', purpose: 'Meeting', recommendingId: rec,
   });
   return { c, dir, opened, dialogs, recordId: saved.data.id, number: saved.data.number, rec, appr, fsMod, pathMod };
 }

@@ -7,7 +7,7 @@ const ALLOWED = [
   'employees:list', 'employees:create', 'employees:update', 'employees:archive', 'employees:restore',
   'signatories:list', 'signatories:create', 'signatories:update', 'signatories:archive', 'signatories:restore',
   'signatories:defaults', 'signatories:setDefault',
-  'records:create', 'records:issueBlank', 'records:listBlank', 'records:fillBlank', 'records:print', 'records:openExport', 'records:preview',
+  'records:issueBlank', 'records:listBlank', 'records:fillBlank', 'records:print', 'records:openExport', 'records:preview',
   'records:list', 'records:get', 'records:update', 'records:archive', 'records:restore',
   'reports:out', 'reports:office', 'reports:export',
   'records:nextNumbers', 'records:findBlank', 'records:unusedBlanks', 'records:deleteUnusedBlanks',
