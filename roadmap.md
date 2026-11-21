@@ -109,24 +109,30 @@ Picked up from Phase 3: active records = `archived_at IS NULL`, plus `status = '
 
 Conventions later phases inherit: every .xlsx export goes through `saveExport` (save dialog, write, `exported` map), so `records:openExport` opens it. Reports read `record_employees` snapshots, with the office saved on the record, and office filters include archived offices (`useOffices`). Exported cells are plain text or numbers, never formulas. E2E dates relative to today come from `localDay(offset)` in `tests/e2e/helpers.js`; login lands on Out today.
 
-### Phase 8 — Blank form stacks NEXT
+### Phase 8 — Blank form stacks ✅ DONE (merged `cdf750f`, 2026-11-21)
 
 Reopens Phase 2: blank forms are printed in stacks and the Mayor's Office Department Head is picked when filling in (US-7 changed). Reopens Phase 3: US-9 allows deleting unused blanks of a past month (US-18).
 HR leaves a stack of numbered blanks on the desk; any employee takes one; HR encodes the returned paper by its number.
-Covers US-16, US-17, US-18. Changes US-7, US-9.
+Covers US-16, US-17, US-18. Changes US-7, US-9. User decision 2026-11-21: the Mayor TO blank keeps the official paper's empty recommending space (no DEPARTMENT HEAD title).
 
 - Issue 1 to 50 blanks in one step, one .xlsx with one page each, signatories checked before numbers are reserved.
 - Encode a returned form by typing its number.
 - Delete a past month's unused blanks.
 - Schema: `records.recommending_*` nullable (migration v3), since a Mayor's Office blank has no Department Head until filled.
 
-**Done when:** in the packaged app, a stack of each of the 4 kinds prints to one .xlsx with one A4 page per number (checked by eye in Excel, logo included), a Mayor's Office blank shows the empty DEPARTMENT HEAD line, a returned number opens Fill in and links the employees, and a past month's unused blanks are deleted while the current month's cannot be. Every US-16, US-17, US-18 and CW-4 condition passes, US-7 and US-9 still pass, and the full E2E suite passes.
+**Done when:** in the packaged app, a stack of each of the 4 kinds prints to one .xlsx with one A4 page per number (checked by eye in Excel, logo included), a Mayor's Office blank shows the empty DEPARTMENT HEAD line, a returned number opens Fill in and links the employees, and a past month's unused blanks are deleted while the current month's cannot be. Every US-16, US-17, US-18 and CW-4 condition passes, US-7 and US-9 still pass, and the full E2E suite passes. — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe: all US-16, US-17, US-18 and CW-4 conditions, US-7 with the Department Head change; 3- and 50-form stacks of all 4 templates opened in Excel 2016 with every sheet selected and the first and last sheet rendered by Excel and checked by eye (116/116 full E2E, 168/168 unit). Results: `docs/test-results/PHASE-8-TEST-RESULTS.md`. Regression: full suite (migration v3, permanent delete), US-1 to US-15, CW-1, CW-2 pass.
+
+Shipped as `src/main/records.js`: `issueBlanks`, `issueBlank` (now on `issueBlanks`), `nextNumbers`, `findBlank`, `unusedBlankMonths`, `deleteUnusedBlanks`, `fillBlank` (Department Head for Mayor blanks), `withCounter` (N numbers), `isDate`. `src/main/print.js`: `buildStackWorkbook` (`buildWorkbook` wraps it), `fillWorkbook` (empty Department Head). `src/main/db.js`: `MIGRATIONS` v3. `src/main/ipc.js`: `records:issueBlank` (count, returns `{ formType, ids, numbers }`), `records:print` (`ids`), routes `records:nextNumbers`, `records:findBlank`, `records:unusedBlanks`, `records:deleteUnusedBlanks`. `src/renderer/pages/NewRecord.jsx` (How many, issue confirmation, Encode a returned form, Delete unused blanks, Department Head at Fill in). `src/renderer/components/PrintFlow.jsx` (`usePrint` stacks). `src/renderer/pages/Records.jsx` (empty Department Head label). Tables: records (recommending_* nullable).
 
 Deliberately not built, and why: linking a blank to an employee when printing, because forms are taken at random (user decision). Reusing a deleted number, because only past months can be deleted.
 
-### Phase 5 — Backup and restore LATER
+Picked up from Phase 2: numbers only from `withCounter`, now N at a time. Picked up from Phase 7: every print path goes through `print(rec)`; a stack passes `ids`. Picked up from Phase 4: `saveExport` for every .xlsx.
 
-On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request).
+Conventions later phases inherit: `records.recommending_*` can be NULL only on a Mayor's Office blank; a filled record always has one. A number is unique only with its form type, so lookups use form type + number. Permanent delete exists only in `deleteUnusedBlanks` (status `blank`, past period); everything else stays archive-only. A multi-form .xlsx is one sheet per form, all sheets selected, workbook active tab 0. E2E creates past-month rows by SQL, since the app numbers only in the current month.
+
+### Phase 5 — Backup and restore NEXT
+
+On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request), NEXT again after Phase 8.
 
 Covers US-13, US-14.
 
