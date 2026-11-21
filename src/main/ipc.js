@@ -9,7 +9,7 @@ import {
 } from './records.js';
 import { getPrintable, buildStackWorkbook, previewOf } from './print.js';
 import { outOn, officeReport, reportFile } from './reports.js';
-import { backupName, writeBackup, restoreBackup } from './backup.js';
+import { backupName, freePath, writeBackup, restoreBackup } from './backup.js';
 
 // Save dialog, write, and remember the file so records:openExport can open it. Used by every export.
 async function saveExport({ id, os, exported }, defaultName, buffer) {
@@ -108,14 +108,14 @@ const ROUTES = {
   'backup:create': ['ready', async ({ pool, os }) => {
     const folder = await os.chooseFolder();
     if (!folder) return { ok: true, data: { canceled: true } };
-    const file = path.join(folder, backupName(new Date()));
     try {
+      const file = await freePath(folder, backupName(new Date()));
       await writeBackup(pool, file);
+      return { ok: true, data: { path: file } };
     } catch (e) {
       console.error('[ipc] backup:create', e);
       return { ok: false, error: `Could not save the backup: ${e.message}` };
     }
-    return { ok: true, data: { path: file } };
   }],
   // US-14: the file is picked in the main process and remembered, so a renderer-supplied path is never restored.
   'backup:pick': ['ready', async ({ id, os, picked }) => {
@@ -128,9 +128,10 @@ const ROUTES = {
     const file = picked.get(id);
     if (!file) return { ok: false, error: 'Choose a backup file first.' };
     picked.delete(id);
-    const before = path.join(os.backupDir, backupName(new Date()).replace('.sql', '-before-restore.sql'));
+    let before;
     try {
       await fs.mkdir(os.backupDir, { recursive: true });
+      before = await freePath(os.backupDir, backupName(new Date()).replace('.sql', '-before-restore.sql'));
       await writeBackup(pool, before);
     } catch (e) {
       console.error('[ipc] backup:restore pre-restore backup', e);

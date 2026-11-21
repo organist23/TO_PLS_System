@@ -8,7 +8,7 @@ import { createOffice, createEmployee } from '../../src/main/directory.js';
 import { createSignatory } from '../../src/main/signatories.js';
 import { issueBlank, fillBlank } from '../../src/main/records.js';
 import { SCHEMA_VERSION } from '../../src/main/db.js';
-import { backupName, writeBackup, restoreBackup } from '../../src/main/backup.js';
+import { backupName, freePath, writeBackup, restoreBackup } from '../../src/main/backup.js';
 
 let pool, dir, ids;
 const NOV = new Date(2026, 10, 20, 9, 0);
@@ -66,10 +66,15 @@ test('writeBackup writes the header, every table, and an end marker', async () =
 test('a backup that fails midway leaves no .sql and no .part', async () => {
   await record();
   const file = path.join(dir, 'b.sql');
-  const realQuery = pool.query.bind(pool);
-  pool.query = (sql, ...rest) => (String(sql).startsWith('SELECT * FROM `records`') ? Promise.reject(new Error('disk lost')) : realQuery(sql, ...rest));
+  const realGet = pool.getConnection.bind(pool);
+  pool.getConnection = async () => {
+    const conn = await realGet();
+    const realQuery = conn.query.bind(conn);
+    conn.query = (sql, ...rest) => (String(sql).startsWith('SELECT * FROM `records`') ? Promise.reject(new Error('disk lost')) : realQuery(sql, ...rest));
+    return conn;
+  };
   await expect(writeBackup(pool, file)).rejects.toThrow('disk lost');
-  pool.query = realQuery;
+  pool.getConnection = realGet;
   expect(fs.readdirSync(dir)).toEqual([]);
 });
 
@@ -154,4 +159,69 @@ test('an older backup (schema 2) restores and is migrated to the current version
   expect(version).toBe(SCHEMA_VERSION);
   const [[col]] = await pool.query("SHOW COLUMNS FROM records LIKE 'recommending_id'");
   expect(col.Null).toBe('YES');
+});
+
+test('freePath never overwrites an earlier backup from the same minute', async () => {
+  expect(await freePath(dir, 'b.sql')).toBe(path.join(dir, 'b.sql'));
+  fs.writeFileSync(path.join(dir, 'b.sql'), 'x');
+  expect(await freePath(dir, 'b.sql')).toBe(path.join(dir, 'b-2.sql'));
+  fs.writeFileSync(path.join(dir, 'b-2.sql'), 'x');
+  expect(await freePath(dir, 'b.sql')).toBe(path.join(dir, 'b-3.sql'));
+});
+
+test('a backup carrying any other statement is refused before anything runs: live data and other databases untouched', async () => {
+  await record();
+  const good = path.join(dir, 'good.sql');
+  await writeBackup(pool, good);
+  const text = fs.readFileSync(good, 'utf8');
+  const before = await snapshot();
+  const db = testConfig().database;
+  const inject = (stmt) => text.replace('SET FOREIGN_KEY_CHECKS = 0;\n', `SET FOREIGN_KEY_CHECKS = 0;\n${stmt};\n`);
+  for (const stmt of [
+    `USE \`${db}\``,
+    `UPDATE \`${db}\`.users SET role = 'admin'`,
+    `DELETE FROM \`${db}\`.records`,
+    `DROP TABLE IF EXISTS \`${db}\`.records`,
+    'CREATE TABLE `users` (id INT) SELECT 1 AS id',
+    "INSERT INTO `offices` (`name`) VALUES\n((SELECT 'x'))",
+    'GRANT ALL ON *.* TO nobody',
+  ]) {
+    const f = path.join(dir, 'bad.sql');
+    fs.writeFileSync(f, inject(stmt));
+    expect(await restoreBackup(testConfig(), f), stmt).toEqual(INVALID);
+    expect(await snapshot(), stmt).toEqual(before);
+  }
+});
+
+test("record text that reads like SQL (Select, Grant, USE, 'DROP') still restores", async () => {
+  await record("Select candidates; Grant review, USE the 'DROP' box");
+  const file = path.join(dir, 'b.sql');
+  await writeBackup(pool, file);
+  const before = await snapshot();
+  await record('Added later');
+  expect(await restoreBackup(testConfig(), file)).toEqual({ ok: true });
+  expect(await snapshot()).toEqual(before);
+});
+
+test('a backup whose rows point at missing parents is refused', async () => {
+  await record();
+  const file = path.join(dir, 'b.sql');
+  await writeBackup(pool, file);
+  // drop the records rows but keep record_employees
+  const text = fs.readFileSync(file, 'utf8').replace(/INSERT INTO `records` [\s\S]*?;\n/, '');
+  fs.writeFileSync(file, text);
+  const before = await snapshot();
+  expect(await restoreBackup(testConfig(), file)).toEqual(INVALID);
+  expect(await snapshot()).toEqual(before);
+});
+
+test('a backup saved with Windows line endings and a BOM still restores', async () => {
+  await record('Kept');
+  const file = path.join(dir, 'b.sql');
+  await writeBackup(pool, file);
+  const before = await snapshot();
+  fs.writeFileSync(file, '﻿' + fs.readFileSync(file, 'utf8').replace(/\n/g, '\r\n'));
+  await record('Added later');
+  expect(await restoreBackup(testConfig(), file)).toEqual({ ok: true });
+  expect(await snapshot()).toEqual(before);
 });
