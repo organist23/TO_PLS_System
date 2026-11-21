@@ -169,6 +169,12 @@ Conventions later phases inherit: a new table must be added to `TABLES` in `back
 
 ### Phase 6 — User account management NEXT
 
-Covers US-2.
+Reopens Phase 5: US-14 restore becomes admin-only (user decision 2026-11-21).
+Covers US-2 (changed), US-14 (changed).
 
-- Admin adds encoders, resets passwords, disables accounts.
+- Admin adds encoders, resets passwords (temporary, changed at next login), disables and re-enables accounts.
+- An `admin` access level for IPC routes; Users page and Restore visible to admins only.
+
+**Done when:** in the packaged app, an admin adds an encoder, the encoder logs in and sees no Users page and no Restore; the admin resets the encoder's password and the encoder must change it at the next login; the admin disables the encoder, whose open session ends and who cannot log in, then re-enables them; the admin cannot disable themselves or the last active admin. Every US-2 and US-14 condition passes, and the full E2E suite passes (end of Part two).
+
+Deliberately not built, and why: editing a user's name or role, and deleting users, because US-2 asks for neither.

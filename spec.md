@@ -34,17 +34,20 @@ An Electron desktop app on one PC (React + Tailwind, Node, local MySQL) where HR
 - [ ] A page cannot be opened without a session.
 
 ### US-2: Manage user accounts (admin)
+Changed 2026-11-21: a reset password is temporary and must be changed at the next login; disabling or resetting ends that user's open session (user decisions before Phase 6 plan).
 **As** an admin, **I want** to add encoders, reset passwords, and disable accounts, **so that** I control who has access.
 
 **Accepts when:**
 - [ ] Admin adds a user with username, full name, role, and initial password.
-- [ ] Admin resets a user's password.
+- [ ] Admin resets a user's password to a temporary one; that user must choose a new password at their next login.
 - [ ] Admin disables and re-enables a user after a confirmation that names the user.
+- [ ] A disabled user cannot log in. Disabling or resetting a user ends that user's open session.
 
 **Rejects when:**
 - [ ] An encoder cannot open the user management page or call its API.
 - [ ] A duplicate username is rejected with a message.
 - [ ] An admin cannot disable their own account or the last active admin.
+- [ ] A password shorter than 8 characters is rejected, as in US-1.
 
 ### US-3: Manage offices and employees
 Changed 2026-11-20: added restore from archive, office archive blocked while it has active employees, fixed employment status list (user decisions before Phase 0 plan).
@@ -236,6 +239,7 @@ Changed 2026-11-21: the date range filter matches travel (inclusive) dates; repr
 - [ ] A failed backup leaves no partial file that looks valid.
 
 ### US-14: Restore from a backup
+Changed 2026-11-21: only an admin can restore; encoders can still back up (user decision before Phase 6 plan).
 **As** HR staff, **I want** to restore a .sql backup, **so that** I can recover records after a failure.
 
 **Accepts when:**
@@ -245,6 +249,7 @@ Changed 2026-11-21: the date range filter matches travel (inclusive) dates; repr
 
 **Rejects when:**
 - [ ] A file that is not a valid backup of this app is rejected and current data is unchanged.
+- [ ] An encoder does not see Restore and cannot call it.
 
 ### US-15: Preview a form before saving it
 **As** HR staff, **I want** to see the filled PLS or TO form on screen before saving it, **so that** I can check names, designations, dates, and signatories before it is printed.
