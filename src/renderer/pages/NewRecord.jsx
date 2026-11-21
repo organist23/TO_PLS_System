@@ -165,9 +165,7 @@ export default function NewRecord({ params = {}, go }) {
     const withSigners = { ...form, recommendingId: Number(form.recommendingId) || null, approvingId: Number(form.approvingId) || null, confirmOverlap };
     const res = filling
       ? await window.api.invoke('records:fillBlank', { ...withSigners, id: filling.id })
-      : editing
-        ? await window.api.invoke('records:update', { ...withSigners, id: editing.id })
-        : await window.api.invoke('records:create', withSigners);
+      : await window.api.invoke('records:update', { ...withSigners, id: editing.id });
     busy.current = false;
     setSaving(false);
     if (res.overlaps) return setOverlaps(res.overlaps);
@@ -303,7 +301,7 @@ export default function NewRecord({ params = {}, go }) {
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-900">
-        {filling ? `Fill in ${filling.formType} ${filling.number}` : editing ? `Edit ${editing.form_type} ${editing.number}` : 'New record'}
+        {filling ? `Fill in ${filling.formType} ${filling.number}` : editing ? `Edit ${editing.form_type} ${editing.number}` : 'Forms'}
       </h1>
       {notice && <Banner kind="success">{notice}</Banner>}
       {saved && (
@@ -322,6 +320,8 @@ export default function NewRecord({ params = {}, go }) {
       {printing.error && <Banner>{printing.error}</Banner>}
       {formError && <Banner>{formError}</Banner>}
 
+      {/* Paper first (US-5): the record form is only for encoding a returned blank or editing a record. */}
+      {(filling || editing) && (
       <form id="record-form" onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-8 rounded-md border border-slate-200 bg-white p-6">
         <div className="grid gap-6 sm:grid-cols-3">
           <RadioGroup legend="Form" name="formType" value={form.formType} options={[['PLS', 'PLS'], ['TO', 'TO']]} disabled={!!filling || !!editing}
@@ -380,6 +380,9 @@ export default function NewRecord({ params = {}, go }) {
             {filling.recommendingName == null ? (
               <Field label="Recommending approval (Department Head who signed)" id="rec-recommendingId" error={errors.recommendingId}>
                 <select {...field('recommendingId')}><option value="">Choose the Department Head</option>{signatoryOptions('recommending')}</select>
+                {signatoryOptions('recommending').length === 0 && (
+                  <p className="mt-1 text-sm text-slate-600">No active recommending signatories. Add them on Signatories.</p>
+                )}
               </Field>
             ) : (
               <div><p className="font-medium text-slate-700">Recommending approval (as printed)</p>
@@ -412,6 +415,7 @@ export default function NewRecord({ params = {}, go }) {
           ) : null}
         </div>
       </form>
+      )}
 
       {!editing && !params.mode && !filling && (
       <section aria-labelledby="stack-heading" className="space-y-6 rounded-md border border-slate-200 bg-white p-6">

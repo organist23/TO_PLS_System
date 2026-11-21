@@ -16,8 +16,8 @@ test.describe('US-16 Print a stack of blank forms', () => {
     seed = await seedDirectory(page, ['Ana Cruz']);
     file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'plsto-us16-')), 'stack.xlsx');
     await mockSaveDialog(app, file);
-    await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
-    await page.getByRole('heading', { name: 'New record' }).waitFor();
+    await page.getByRole('navigation').getByRole('button', { name: 'Forms' }).click();
+    await page.getByRole('heading', { name: 'Forms', exact: true }).waitFor();
   });
   test.afterEach(async () => {
     await app.close();
@@ -34,10 +34,8 @@ test.describe('US-16 Print a stack of blank forms', () => {
 
   test('the confirmation names count, numbers and the chosen signatories before anything is reserved; Cancel reserves nothing', async () => {
     await seedRecord(page, seed); // <m>-1 already used
-    // The Save form keeps its own choices; only the section's are used for blanks.
-    await recordForm(page).getByRole('radio', { name: 'TO', exact: true }).check();
-    await recordForm(page).getByRole('radio', { name: 'Sangguniang Bayan' }).check();
-    await recordForm(page).getByLabel('Approved by').selectOption({ label: 'VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR' }); // differs from the section's choice below
+    // Paper first (US-5 changed): there is no record form on Forms until a returned blank is opened.
+    await expect(recordForm(page)).toHaveCount(0);
     await blankFormsSection(page).getByLabel('Approved by').selectOption({ label: 'RIC RONELSON D. ASUNCION — MUNICIPAL VICE MAYOR' }); // e.g. an Acting Mayor
     await expect(blankFormsSection(page)).toContainText('Left empty: the Department Head of whoever takes the form signs the paper.');
     await page.getByLabel('How many').fill('5');

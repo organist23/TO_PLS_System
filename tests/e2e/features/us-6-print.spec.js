@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const ExcelJS = createRequire(import.meta.url)('exceljs'); // Playwright's ESM loader cannot import exceljs directly
-import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, openedPaths, saveFromPreview } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, openedPaths, saveFromPreview, openReturnedBlank, pickDepartmentHead } from '../helpers.js';
 
 const readSheet = async (file) => {
   const wb = new ExcelJS.Workbook();
@@ -20,8 +20,8 @@ test.describe('US-6 Print a filled form as .xlsx', () => {
     await loginAsChangedAdmin(page);
     await seedDirectory(page, ['MARIA PEÑA']);
     await mockOpenPath(app);
-    await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
-    await page.getByRole('heading', { name: 'New record' }).waitFor();
+    await page.getByRole('navigation').getByRole('button', { name: 'Forms' }).click();
+    await page.getByRole('heading', { name: 'Forms', exact: true }).waitFor();
   });
   test.afterEach(async () => {
     await app.close();
@@ -31,6 +31,7 @@ test.describe('US-6 Print a filled form as .xlsx', () => {
   const button = (name) => page.getByRole('button', { name, exact: true });
 
   async function saveRecord() {
+    await openReturnedBlank(page); // paper first (US-5 changed): records come from an issued blank
     await page.getByLabel('Date filed').fill('2026-11-21');
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'MARIA PEÑA — MHO' });
     await button('Add').click();
@@ -39,6 +40,7 @@ test.describe('US-6 Print a filled form as .xlsx', () => {
     await page.getByLabel('Inclusive to').fill('2026-11-22');
     await page.getByLabel('Departure').fill('2026-11-20T08:00');
     await page.getByLabel('Purpose').fill('Submit quarterly reports');
+    await pickDepartmentHead(page);
     await button('Save').click();
     await expect(page.getByRole('status')).toHaveText(`Saved PLS ${thisMonth()}-1`);
   }

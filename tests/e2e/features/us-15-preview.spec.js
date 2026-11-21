@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, invoke } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, invoke, openReturnedBlank, pickDepartmentHead } from '../helpers.js';
 
 const ExcelJS = createRequire(import.meta.url)('exceljs'); // Playwright's ESM loader cannot import exceljs directly
 
@@ -16,8 +16,8 @@ test.describe('US-15 Preview a form before saving it', () => {
     await loginAsChangedAdmin(page);
     seed = await seedDirectory(page);
     await mockSaveDialog(app, file);
-    await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
-    await page.getByRole('heading', { name: 'New record' }).waitFor();
+    await page.getByRole('navigation').getByRole('button', { name: 'Forms' }).click();
+    await page.getByRole('heading', { name: 'Forms', exact: true }).waitFor();
   });
   test.afterEach(async () => {
     await app.close();
@@ -28,11 +28,13 @@ test.describe('US-15 Preview a form before saving it', () => {
   const preview = () => page.getByRole('dialog', { name: /^Preview / });
 
   async function saveRecord({ name = 'Ana Cruz', purpose = 'Submit quarterly reports' } = {}) {
+    await openReturnedBlank(page); // paper first (US-5 changed): records come from an issued blank
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: `${name} — MHO` });
     await button('Add').click();
     await page.getByLabel('Destination').fill('Provincial Capitol');
     await page.getByLabel('Departure').fill('2026-11-21T08:00');
     await page.getByLabel('Purpose').fill(purpose);
+    await pickDepartmentHead(page);
     await button('Save').click();
     await expect(page.getByRole('status')).toHaveText(`Saved PLS ${thisMonth()}-1`);
   }
@@ -111,7 +113,7 @@ test.describe('US-15 Preview a form before saving it', () => {
     const { officeId } = seed;
     await invoke(page, 'employees:create', { fullName: '<script>window.__pwned=1</script>', employmentStatus: 'Casual', officeId });
     await page.getByRole('navigation').getByRole('button', { name: 'Employees' }).click();
-    await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
+    await page.getByRole('navigation').getByRole('button', { name: 'Forms' }).click();
     await saveRecord({ name: '<script>window.__pwned=1</script>', purpose: '<img src=x onerror="window.__pwned=2">' });
     await button('Print').click();
     await expect(preview().getByText('<script>window.__pwned=1</script>', { exact: true })).toBeVisible();

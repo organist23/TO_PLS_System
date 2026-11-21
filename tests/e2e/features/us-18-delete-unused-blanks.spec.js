@@ -28,8 +28,8 @@ test.describe('US-18 Delete unused blanks of a past month', () => {
     filledOld = await seedRecord(page, seed);
     await moveToLastMonth(pool, [blanks.ids[0], blanks.ids[1], filledOld.id]); // 2 unused blanks + 1 filled record last month
     await invoke(page, 'records:archive', { id: blanks.ids[1] }); // a voided blank counts too
-    await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
-    await page.getByRole('heading', { name: 'New record' }).waitFor();
+    await page.getByRole('navigation').getByRole('button', { name: 'Forms' }).click();
+    await page.getByRole('heading', { name: 'Forms', exact: true }).waitFor();
   });
   test.afterEach(async () => {
     await app.close();

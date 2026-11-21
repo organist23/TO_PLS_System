@@ -16,7 +16,7 @@ const PAGES = {
   employees: ['Employees', Employees],
   offices: ['Offices', Offices],
   signatories: ['Signatories', Signatories],
-  newRecord: ['New record', NewRecord],
+  newRecord: ['Forms', NewRecord], // paper first: print blanks, encode returned ones
   records: ['Records', Records],
   reports: ['Reports', Reports],
 };
