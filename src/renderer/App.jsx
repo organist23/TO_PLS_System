@@ -9,6 +9,7 @@ import Records from './pages/Records.jsx';
 import OutToday from './pages/OutToday.jsx';
 import Reports from './pages/Reports.jsx';
 import Backup from './pages/Backup.jsx';
+import Users from './pages/Users.jsx';
 import DbError from './pages/DbError.jsx';
 
 const dbError = location.hash.startsWith('#db-error=') ? decodeURIComponent(location.hash.slice('#db-error='.length)) : null;
@@ -21,6 +22,7 @@ const PAGES = {
   records: ['Records', Records],
   reports: ['Reports', Reports],
   backup: ['Backup', Backup],
+  users: ['Users', Users, 'admin'], // US-2: admins only (the routes refuse encoders too)
 };
 
 export default function App() {
@@ -64,7 +66,7 @@ export default function App() {
       <nav aria-label="Main" className="w-56 shrink-0 border-r border-slate-200 bg-white p-4">
         <p className="px-3 pb-6 text-sm font-semibold text-slate-900">PLS-TO Records System</p>
         <ul className="space-y-1">
-          {Object.entries(PAGES).map(([key, [label]]) => (
+          {Object.entries(PAGES).filter(([, [, , only]]) => !only || user.role === only).map(([key, [label]]) => (
             <li key={key}>
               <button
                 aria-current={page === key ? 'page' : undefined}
@@ -85,7 +87,7 @@ export default function App() {
           </button>
         </header>
         <main className="mx-auto max-w-5xl p-8">
-          <Page key={seq} params={params} go={go} signOut={signOut} />
+          <Page key={seq} params={params} go={go} signOut={signOut} user={user} />
         </main>
       </div>
     </div>
