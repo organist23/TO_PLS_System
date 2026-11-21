@@ -31,7 +31,7 @@ export async function loginAsChangedAdmin(page) {
   await page.getByLabel('New password', { exact: true }).fill(NEW_PASSWORD);
   await page.getByLabel('Confirm new password').fill(NEW_PASSWORD);
   await page.getByRole('button', { name: 'Save password' }).click();
-  await page.getByRole('heading', { name: 'Employees' }).waitFor();
+  await page.getByRole('heading', { name: 'Out today' }).waitFor(); // the dashboard opens after login (US-1)
 }
 
 export const invoke = (page, channel, payload) => page.evaluate(([c, p]) => window.api.invoke(c, p), [channel, payload]);

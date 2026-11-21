@@ -13,7 +13,7 @@ test.describe('US-1 Log in and log out', () => {
 
   test('valid login, after the forced change, opens the dashboard', async () => {
     await loginAsChangedAdmin(page);
-    await expect(page.getByRole('heading', { name: 'Employees' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Out today' })).toBeVisible();
     await expect(page.getByText('Administrator')).toBeVisible();
   });
 
@@ -87,7 +87,7 @@ test.describe('US-1 Log in and log out', () => {
     await expect(alert()).toHaveText('Invalid username or password');
     await page.getByLabel('Password', { exact: true }).fill(NEW_PASSWORD);
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page.getByRole('heading', { name: 'Employees' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Out today' })).toBeVisible();
   });
 
   test('double-clicking Sign in logs in once without error', async () => {
@@ -122,7 +122,7 @@ test.describe('US-1 session stays inside the app window', () => {
       // Playwright's auto-wait hangs on a cancelled navigation, so read the URL from the main process.
       const url = await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.getURL());
       expect(url).toMatch(/dist\/renderer\/index\.html$/);
-      expect(await page.getByRole('heading', { name: 'Employees' }).count()).toBe(1);
+      expect(await page.getByRole('heading', { name: 'Out today' }).count()).toBe(1);
     } finally {
       await app.close();
       await pool.end();
