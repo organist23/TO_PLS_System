@@ -4,7 +4,9 @@ import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee, archiveOffice } from '../../src/main/directory.js';
 import { createSignatory } from '../../src/main/signatories.js';
 import { createRecord, issueBlank, archiveRecord } from '../../src/main/records.js';
-import { outOn, officeReport } from '../../src/main/reports.js';
+import { outOn, officeReport, reportFile } from '../../src/main/reports.js';
+import { createRequire } from 'node:module';
+const ExcelJS = createRequire(import.meta.url)('exceljs');
 
 let pool, ids;
 const NOV = new Date(2026, 10, 20, 9, 0);
@@ -110,4 +112,42 @@ test('officeReport rejects a missing, invalid or reversed range', async () => {
   expect(await report({ from: '2026-11-22', to: '2026-11-21' })).toEqual({
     ok: false, error: 'Check the highlighted fields', errors: { to: 'End date is before start date' },
   });
+});
+
+const sheetOf = async (buffer) => {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  expect(wb.worksheets.map((w) => w.name)).toEqual(['Report']);
+  return wb.worksheets[0];
+};
+const rowText = (ws, n, cols = 7) => Array.from({ length: cols }, (_, i) => ws.getRow(n).getCell(i + 1).text);
+
+test('reportFile writes the same rows and counts as the report', async () => {
+  const res = await reportFile(pool, { from: '2026-11-01', to: '2026-11-30' });
+  expect(res.data.name).toBe('PLS-TO report 2026-11-01 to 2026-11-30.xlsx');
+  const ws = await sheetOf(res.data.buffer);
+  expect(ws.getCell('A1').text).toBe('PLS and TO report, 2026-11-01 to 2026-11-30');
+  expect(ws.getCell('A2').text).toBe('Office: All · Form: All');
+  expect(rowText(ws, 4)).toEqual(['Office', 'Employee', 'Form', 'Number', 'Date filed', 'Travel dates', 'Destination']);
+  expect(rowText(ws, 5)).toEqual(['MHO', 'Ana', 'PLS', '2026-11-1', '2026-11-19', '2026-11-20 to 2026-11-22', 'Provincial Capitol']);
+  expect(rowText(ws, 6)).toEqual(['MHO', 'Ben', 'TO', '2026-11-1', '2026-11-19', '2026-11-21 to 2026-11-21', 'Manila']);
+  expect(rowText(ws, 7)).toEqual(['RHU', 'Carla', 'PLS', '2026-11-1', '2026-11-19', '2026-11-20 to 2026-11-22', 'Provincial Capitol']);
+  expect(rowText(ws, 8)).toEqual(['', '', '', '', '', '', '']);
+  expect(rowText(ws, 10, 3)).toEqual(['Office', 'PLS', 'TO']);
+  expect(rowText(ws, 11, 3)).toEqual(['MHO', '1', '1']);
+  expect(rowText(ws, 12, 3)).toEqual(['RHU', '1', '0']);
+  expect(ws.rowCount).toBe(12);
+});
+
+test('reportFile names the chosen office and form, and refuses a bad range', async () => {
+  const res = await reportFile(pool, { from: '2026-11-01', to: '2026-11-30', officeId: ids.rhu, formType: 'PLS' });
+  expect((await sheetOf(res.data.buffer)).getCell('A2').text).toBe('Office: RHU · Form: PLS');
+  expect((await reportFile(pool, { from: '2026-11-02', to: '2026-11-01' })).errors).toEqual({ to: 'End date is before start date' });
+});
+
+test('report text starting with = is written as text, not a formula', async () => {
+  await pool.query("UPDATE records SET destination = '=1+1' WHERE id = ?", [ids.b.id]);
+  const ws = await sheetOf((await reportFile(pool, { from: '2026-11-01', to: '2026-11-30' })).data.buffer);
+  expect(ws.getCell('G6').value).toBe('=1+1');
+  expect(ws.getCell('G6').formula).toBeUndefined();
 });

@@ -9,6 +9,7 @@ const ALLOWED = [
   'signatories:defaults', 'signatories:setDefault',
   'records:create', 'records:issueBlank', 'records:listBlank', 'records:fillBlank', 'records:print', 'records:openExport', 'records:preview',
   'records:list', 'records:get', 'records:update', 'records:archive', 'records:restore',
+  'reports:out', 'reports:office', 'reports:export',
 ];
 
 contextBridge.exposeInMainWorld('api', {

@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import { fieldErrors } from './directory.js';
 import { FORM_TYPES, isDate } from './records.js';
 
@@ -54,4 +55,38 @@ export async function officeReport(pool, { officeId = null, formType = '', from,
     c[f] = n;
   }
   return { ok: true, data: { rows, counts } };
+}
+
+// Every value is written as plain text or a number, so text like "=1+1" never becomes a formula.
+async function reportWorkbook({ rows, counts }, { from, to, officeName, formType }) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Report');
+  ws.columns = [18, 28, 8, 16, 12, 26, 36].map((width) => ({ width }));
+  ws.addRow([`PLS and TO report, ${from} to ${to}`]).font = { bold: true, size: 14 };
+  ws.addRow([`Office: ${officeName ?? 'All'} · Form: ${formType || 'All'}`]);
+  ws.addRow([]);
+  ws.addRow(['Office', 'Employee', 'Form', 'Number', 'Date filed', 'Travel dates', 'Destination']).font = { bold: true };
+  for (const r of rows) {
+    ws.addRow([r.officeName, r.fullName, r.formType, r.number, r.dateFiled, `${r.inclusiveFrom} to ${r.inclusiveTo}`, r.destination]);
+  }
+  ws.addRow([]);
+  ws.addRow([]);
+  ws.addRow(['Office', 'PLS', 'TO']).font = { bold: true };
+  for (const c of counts) ws.addRow([c.officeName, c.PLS, c.TO]);
+  return Buffer.from(await wb.xlsx.writeBuffer());
+}
+
+export async function reportFile(pool, filters = {}) {
+  const res = await officeReport(pool, filters);
+  if (!res.ok) return res;
+  const oid = Number(filters.officeId) || 0;
+  const [[office]] = oid ? await pool.query('SELECT name FROM offices WHERE id = ?', [oid]) : [[undefined]];
+  const formType = FORM_TYPES.includes(filters.formType) ? filters.formType : '';
+  return {
+    ok: true,
+    data: {
+      name: `PLS-TO report ${filters.from} to ${filters.to}.xlsx`,
+      buffer: await reportWorkbook(res.data, { from: filters.from, to: filters.to, officeName: office?.name, formType }),
+    },
+  };
 }

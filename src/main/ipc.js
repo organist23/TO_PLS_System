@@ -5,6 +5,24 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createRecord, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord } from './records.js';
 import { getPrintable, buildWorkbook, previewOf } from './print.js';
+import { outOn, officeReport, reportFile } from './reports.js';
+
+// Save dialog, write, and remember the file so records:openExport can open it. Used by every export.
+async function saveExport({ id, os, exported }, defaultName, buffer) {
+  const { canceled, filePath } = await os.showSaveDialog({
+    defaultPath: path.join(os.documentsDir, defaultName),
+    filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+  });
+  if (canceled || !filePath) return { ok: true, data: { canceled: true } };
+  try {
+    await fs.writeFile(filePath, buffer);
+  } catch (e) {
+    console.error('[ipc] export write', e);
+    return { ok: false, error: 'Could not save the file. If it is open in Excel, close it and try again.' };
+  }
+  exported.set(id, filePath);
+  return { ok: true, data: { path: filePath } };
+}
 
 // Access levels: public, logged in (password change may be pending), ready (logged in, password changed).
 const ROUTES = {
@@ -59,23 +77,16 @@ const ROUTES = {
     const rec = await getPrintable(pool, p.id);
     return rec.ok ? { ok: true, data: await previewOf(rec.data) } : rec;
   }],
-  'records:print': ['ready', async ({ pool, id, p, os, exported }) => {
-    const rec = await getPrintable(pool, p.id);
+  'records:print': ['ready', async (ctx) => {
+    const rec = await getPrintable(ctx.pool, ctx.p.id);
     if (!rec.ok) return rec;
-    const buffer = await buildWorkbook(rec.data);
-    const { canceled, filePath } = await os.showSaveDialog({
-      defaultPath: path.join(os.documentsDir, `${rec.data.form_type} ${rec.data.number}.xlsx`),
-      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
-    });
-    if (canceled || !filePath) return { ok: true, data: { canceled: true } };
-    try {
-      await fs.writeFile(filePath, buffer);
-    } catch (e) {
-      console.error('[ipc] records:print write', e);
-      return { ok: false, error: 'Could not save the file. If it is open in Excel, close it and try again.' };
-    }
-    exported.set(id, filePath);
-    return { ok: true, data: { path: filePath } };
+    return saveExport(ctx, `${rec.data.form_type} ${rec.data.number}.xlsx`, await buildWorkbook(rec.data));
+  }],
+  'reports:out': ['ready', ({ pool, p }) => outOn(pool, p)],
+  'reports:office': ['ready', ({ pool, p }) => officeReport(pool, p)],
+  'reports:export': ['ready', async (ctx) => {
+    const file = await reportFile(ctx.pool, ctx.p);
+    return file.ok ? saveExport(ctx, file.data.name, file.data.buffer) : file;
   }],
   // Opens only the file this window just saved: a renderer-supplied path could launch anything.
   'records:openExport': ['ready', async ({ id, os, exported }) => {
@@ -92,7 +103,7 @@ export const CHANNELS = Object.keys(ROUTES);
 // os = { showSaveDialog(opts), openPath(file), documentsDir }: Electron's dialog/shell, injected so tests can fake them.
 export function registerIpc(ipcMain, pool, os = {}) {
   const sessions = new Map(); // webContents id → User; lives only in the main process
-  const exported = new Map(); // webContents id → last file saved by records:print
+  const exported = new Map(); // webContents id → last file saved by records:print or reports:export
   for (const [channel, [access, fn]] of Object.entries(ROUTES)) {
     ipcMain.handle(channel, async (event, payload) => {
       const id = event.sender.id;

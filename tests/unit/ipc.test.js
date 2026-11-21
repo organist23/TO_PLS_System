@@ -217,3 +217,36 @@ test('records list, get, update, archive and restore round trip', async () => {
   expect((await c('records:restore', { id: recordId })).ok).toBe(true);
   expect((await c('records:list', {})).data.rows.map((r) => r.id)).toEqual([recordId]);
 });
+
+// ---------- Phase 4: out today and reports ----------
+
+test('report routes need a changed password', async () => {
+  await call(1, 'auth:login', { username: 'admin', password: 'admin' });
+  for (const ch of ['reports:out', 'reports:office', 'reports:export']) {
+    expect(await call(1, ch, {})).toEqual({ ok: false, error: 'Change your password first' });
+  }
+});
+
+test('reports:out and reports:office return the saved record', async () => {
+  const { c, number } = await printSetup();
+  expect((await c('reports:out', { date: '2026-11-20' })).data.map((r) => r.number)).toEqual([number]);
+  expect((await c('reports:office', { from: '2026-11-01', to: '2026-11-30' })).data.counts).toEqual([{ officeName: 'MHO', PLS: 1, TO: 0 }]);
+});
+
+test('reports:export writes a readable file that openExport then opens; cancel and bad range write nothing', async () => {
+  const { c, dir, opened, dialogs, fsMod, pathMod } = await printSetup();
+  const res = await c('reports:export', { from: '2026-11-01', to: '2026-11-30' });
+  expect(res).toEqual({ ok: true, data: { path: pathMod.join(dir, 'out.xlsx') } });
+  expect(pathMod.basename(dialogs[0].defaultPath)).toBe('PLS-TO report 2026-11-01 to 2026-11-30.xlsx');
+  expect(fsMod.readFileSync(res.data.path).subarray(0, 2).toString()).toBe('PK');
+  expect(await c('records:openExport')).toEqual({ ok: true });
+  expect(opened).toEqual([res.data.path]);
+  expect((await c('reports:export', { from: '2026-11-02', to: '2026-11-01' })).errors).toEqual({ to: 'End date is before start date' });
+  expect(dialogs).toHaveLength(1);
+});
+
+test('reports:export cancelled writes nothing', async () => {
+  const { c, dir, fsMod } = await printSetup({ dialogResult: { canceled: true } });
+  expect(await c('reports:export', { from: '2026-11-01', to: '2026-11-30' })).toEqual({ ok: true, data: { canceled: true } });
+  expect(fsMod.readdirSync(dir)).toEqual([]);
+});
