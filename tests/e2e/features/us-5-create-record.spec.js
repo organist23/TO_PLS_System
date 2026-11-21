@@ -137,6 +137,14 @@ test.describe('US-5 Create a PLS or TO record', () => {
     expect(r.designation).toBe('Clerk');
   });
 
+  test('a purpose longer than 360 characters is rejected', async () => {
+    await fill();
+    await page.getByLabel('Purpose').fill('a'.repeat(361));
+    await button('Save').click();
+    await expect(page.locator('#rec-purpose-error')).toHaveText('At most 360 characters');
+    expect(await count()).toBe(0);
+  });
+
   test('overlap shows a warning; Cancel saves nothing; Save anyway saves the next number', async () => {
     const ym = thisMonth();
     await fill({ from: '2026-11-10', to: '2026-11-12' });

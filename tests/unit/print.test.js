@@ -108,3 +108,31 @@ describe.each(Object.entries(MAP))('%s', (key, m) => {
     expect([t(ws, m.recName), t(ws, m.apprName)]).toEqual(['JUAN P. SANTOS', 'VINCENT E. HERMOSO']);
   });
 });
+
+test('templates have no whitespace-only cells (they stop text overflowing into the next cell)', async () => {
+  for (const f of ['pls-mayor', 'to-mayor', 'pls-sb', 'to-sb']) {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(`src/main/templates/${f}.xlsx`);
+    const junk = [];
+    wb.worksheets[0].eachRow((row) => row.eachCell((c) => {
+      if (typeof c.value === 'string' && c.value.trim() === '') junk.push(c.address);
+    }));
+    expect(junk, f).toEqual([]);
+  }
+});
+
+test('long inclusive, destination and vehicle values shrink to fit their space (min 8 pt)', async () => {
+  const ws = await read(await buildWorkbook(record('PLS', 'MAYOR', {
+    inclusive_from: '2026-12-30', inclusive_to: '2027-01-02',
+    destination: 'Department of the Interior and Local Government Provincial Office, Capitol Compound, Bayombong, Nueva Vizcaya',
+    vehicle: 'Municipal service vehicle Toyota Hilux SAB 1234',
+  })));
+  // INCLUSIVE DATE(S): December 30, 2026 - January 2, 2027 = 54 chars; 44 fit at 12 pt -> floor(12*44/54) = 9
+  expect(ws.getCell('A21').font.size).toBe(9);
+  // DESTINATION: + 111 chars = 124 chars; 100 fit at 12 pt -> floor(12*100/124) = 9
+  expect(ws.getCell('A20').font.size).toBe(9);
+  // VEHICLE: + 47 = 56 chars; 44 fit at 12 pt -> floor(12*44/56) = 9
+  expect(ws.getCell('F21').font.size).toBe(9);
+  const short = await read(await buildWorkbook(record('PLS', 'MAYOR')));
+  expect(short.getCell('A21').font.size).toBe(12); // template size kept when it fits
+});

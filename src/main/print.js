@@ -67,6 +67,20 @@ const labelled = (cell, value) => {
   cell.value = `${t.slice(0, t.indexOf(':') + 1)} ${value}`;
 };
 
+// exceljs shares one style object between cells loaded with the same style, so assigning cell.font would
+// change every cell sharing it. Give the cell its own style copy instead.
+const restyle = (cell, change) => {
+  cell.style = { ...cell.style, ...change };
+};
+
+// Characters that fit at 12 pt before the next filled cell (measured on the rendered templates).
+const FITS_AT_12 = { inc: 44, dest: 100, veh: 44 };
+// shortcut: estimates width from character count, not glyph widths; text past 8 pt still clips. Measure fonts if staff report cut text.
+const shrinkToFit = (cell, fits) => {
+  const size = Math.max(8, Math.min(cell.font?.size ?? 12, Math.floor((12 * fits) / cell.text.length)));
+  restyle(cell, { font: { ...cell.font, size } });
+};
+
 export async function buildWorkbook(record) {
   const layout = LAYOUTS[`${record.form_type}-${record.issuing_office}`];
   const wb = new ExcelJS.Workbook();
@@ -88,8 +102,7 @@ export async function buildWorkbook(record) {
     const c = cell(key);
     const row = c.row;
     ws.mergeCells(`A${row}:K${row}`);
-    c.font = { ...cell(key === 'recName' ? 'apprName' : 'apprTitle').font };
-    c.alignment = { horizontal: 'center', vertical: 'middle' };
+    restyle(c, { font: { ...cell(key === 'recName' ? 'apprName' : 'apprTitle').font }, alignment: { horizontal: 'center', vertical: 'middle' } });
   }
   cell('recName').value = record.recommending_name;
   cell('recTitle').value = record.recommending_title;
@@ -107,6 +120,7 @@ export async function buildWorkbook(record) {
     labelled(cell('dest'), record.destination);
     labelled(cell('inc'), formatRange(record.inclusive_from, record.inclusive_to));
     if (record.vehicle) labelled(cell('veh'), record.vehicle);
+    for (const key of Object.keys(FITS_AT_12)) shrinkToFit(cell(key), FITS_AT_12[key]);
     labelled(cell('dep'), formatDate(record.departure_at));
     labelled(cell('depTime'), formatTime(record.departure_at));
     if (record.return_at) {
@@ -117,7 +131,7 @@ export async function buildWorkbook(record) {
       const c = ws.getCell(`A${layout.purposeRow + i}`);
       if (i === 0) labelled(c, line);
       else c.value = line || null;
-      c.font = { ...c.font, size: PURPOSE_SIZE };
+      restyle(c, { font: { ...c.font, size: PURPOSE_SIZE } });
     });
   }
   return Buffer.from(await wb.xlsx.writeBuffer());
