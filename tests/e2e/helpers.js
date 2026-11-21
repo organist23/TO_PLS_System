@@ -82,3 +82,15 @@ export async function saveFromPreview(page) {
   const preview = page.getByRole('dialog', { name: /^Preview / });
   await preview.getByRole('button', { name: 'Save as Excel' }).click();
 }
+
+// A filled record through the real records:create handler (setup, not the UI under test). seed = seedDirectory's result.
+export const seedRecord = (page, seed, over = {}) =>
+  invoke(page, 'records:create', {
+    formType: 'PLS', issuingOffice: 'MAYOR', dateFiled: '2026-11-20', employeeIds: [Object.values(seed.employees)[0]],
+    destination: 'Provincial Capitol', vehicle: '', inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-20',
+    departureAt: '2026-11-20T08:00', returnAt: '', purpose: 'Submit reports',
+    recommendingId: seed.signatories.deptHead, approvingId: seed.signatories.mayor, ...over,
+  }).then((r) => r.data);
+
+// Records page: the Number column of the list, in order (retries until it matches).
+export const listNumbers = (page) => page.locator('table tbody tr td:first-child');
