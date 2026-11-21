@@ -5,6 +5,7 @@ import Employees from './pages/Employees.jsx';
 import Offices from './pages/Offices.jsx';
 import Signatories from './pages/Signatories.jsx';
 import NewRecord from './pages/NewRecord.jsx';
+import Records from './pages/Records.jsx';
 import DbError from './pages/DbError.jsx';
 
 const dbError = location.hash.startsWith('#db-error=') ? decodeURIComponent(location.hash.slice('#db-error='.length)) : null;
@@ -13,11 +14,13 @@ const PAGES = {
   offices: ['Offices', Offices],
   signatories: ['Signatories', Signatories],
   newRecord: ['New record', NewRecord],
+  records: ['Records', Records],
 };
 
 export default function App() {
   const [user, setUser] = useState(undefined); // undefined = still checking the session
-  const [page, setPage] = useState('employees');
+  const [{ page, params }, setNav] = useState({ page: 'employees', params: {} });
+  const go = (p, prm = {}) => setNav({ page: p, params: prm });
 
   useEffect(() => {
     if (!dbError) window.api.invoke('auth:me').then((res) => setUser(res.ok ? res.data : null));
@@ -29,7 +32,7 @@ export default function App() {
   const logout = async () => {
     await window.api.invoke('auth:logout');
     setUser(null);
-    setPage('employees');
+    go('employees');
   };
 
   if (!user) return <Login onLogin={setUser} />;
@@ -47,7 +50,7 @@ export default function App() {
             <li key={key}>
               <button
                 aria-current={page === key ? 'page' : undefined}
-                onClick={() => setPage(key)}
+                onClick={() => go(key)}
                 className={`w-full rounded-md px-3 py-2 text-left text-sm font-medium ${page === key ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50'}`}
               >
                 {label}
@@ -64,7 +67,7 @@ export default function App() {
           </button>
         </header>
         <main className="mx-auto max-w-5xl p-8">
-          <Page />
+          <Page key={`${page}:${params.mode ?? ''}:${params.id ?? ''}:${params.openId ?? ''}`} params={params} go={go} />
         </main>
       </div>
     </div>
