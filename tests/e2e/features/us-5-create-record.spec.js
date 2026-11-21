@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, recordForm } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, recordForm, blankFormsSection } from '../helpers.js';
 
 test.describe('US-5 Create a PLS or TO record', () => {
   let app, page, pool;
@@ -176,7 +176,8 @@ test.describe('US-5 empty pick lists', () => {
       await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
       await expect(page.getByText('No active employees. Add them on Employees.')).toBeVisible();
       await expect(page.getByText('No active recommending signatories. Add them on Signatories.')).toBeVisible();
-      await expect(page.getByText('No active approving signatories. Add them on Signatories.')).toBeVisible();
+      await expect(recordForm(page).getByText('No active approving signatories. Add them on Signatories.')).toBeVisible();
+      await expect(blankFormsSection(page).getByText('No active approving signatories. Add them on Signatories.')).toBeVisible();
     } finally {
       await app.close();
       await pool.end();
