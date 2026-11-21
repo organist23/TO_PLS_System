@@ -56,6 +56,26 @@ test.describe('US-9 Archive and restore a record', () => {
     await expect(listNumbers(page)).toHaveText([`${m}-1`]);
   });
 
+  test('restoring a filled record warns on overlap; Cancel keeps it archived; Restore anyway restores', async () => {
+    const dialog = await archiveOpen(`${m}-1`); // Ana Cruz, 2026-11-20
+    await dialog.getByRole('button', { name: 'Archive' }).click();
+    await expect(page.getByRole('status')).toHaveText(`Archived ${m}-1`);
+    await seedRecord(page, seed); // M-2: Ana Cruz, 2026-11-20
+    await page.getByLabel('Status').selectOption({ label: 'Archived' });
+    await page.getByRole('button', { name: `Open ${m}-1` }).click();
+    await button('Restore').click();
+    const warn = page.getByRole('dialog', { name: 'Possible overlap' });
+    await expect(warn).toContainText(`Ana Cruz already has PLS ${m}-2 on 2026-11-20 to 2026-11-20`);
+    await warn.getByRole('button', { name: 'Cancel' }).click();
+    await expect(warn).toBeHidden();
+    expect(await archivedAt(rec.id)).not.toBeNull();
+    await expect(button('Restore')).toBeVisible();
+    await button('Restore').click();
+    await warn.getByRole('button', { name: 'Restore anyway' }).click();
+    await expect(page.getByRole('status')).toHaveText(`Restored ${m}-1`);
+    expect(await archivedAt(rec.id)).toBeNull();
+  });
+
   test("an archived record's number is never reused", async () => {
     const dialog = await archiveOpen(`${m}-1`);
     await dialog.getByRole('button', { name: 'Archive' }).click();

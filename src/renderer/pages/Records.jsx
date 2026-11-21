@@ -19,6 +19,7 @@ export default function Records({ params = {}, go }) {
   const [detail, setDetail] = useState(params.openId ? { status: 'loading', id: params.openId } : null);
   const [notice, setNotice] = useState(params.notice ?? '');
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [overlaps, setOverlaps] = useState(null); // restore would overlap these active records
   const [acting, setActing] = useState({ pending: false, error: '' });
   const { print, printing, resetPrinting, openFile, dialog: previewDialog } = usePrint();
   const listSeq = useRef(0);
@@ -68,13 +69,18 @@ export default function Records({ params = {}, go }) {
     loadList();
   }
 
-  async function setArchived(archive) {
+  async function setArchived(archive, confirmOverlap = false) {
     const rec = detail.rec;
     setActing({ pending: true, error: '' });
-    const res = await window.api.invoke(archive ? 'records:archive' : 'records:restore', { id: rec.id });
+    const res = await window.api.invoke(archive ? 'records:archive' : 'records:restore', { id: rec.id, confirmOverlap });
+    if (res.overlaps) {
+      setActing({ pending: false, error: '' });
+      return setOverlaps(res.overlaps);
+    }
     setActing({ pending: false, error: res.ok ? '' : res.error });
     if (!res.ok) return;
     setArchiveOpen(false);
+    setOverlaps(null);
     if (archive) {
       setDetail(null);
       setNotice(`Archived ${rec.number}`);
@@ -141,7 +147,7 @@ export default function Records({ params = {}, go }) {
               </div>
             )}
             {printing.error && <Banner>{printing.error}</Banner>}
-            {!archiveOpen && acting.error && <Banner>{acting.error}</Banner>}
+            {!archiveOpen && !overlaps && acting.error &&<Banner>{acting.error}</Banner>}
 
             <dl className="grid gap-4 rounded-md border border-slate-200 bg-white p-6 text-sm sm:grid-cols-2">
               {[
@@ -191,6 +197,26 @@ export default function Records({ params = {}, go }) {
               pending={acting.pending}
               onConfirm={() => setArchived(true)}
               onCancel={() => setArchiveOpen(false)}
+            />
+
+            <ConfirmDialog
+              open={!!overlaps}
+              title="Possible overlap"
+              message={
+                <ul className="list-disc space-y-1 pl-5">
+                  {overlaps?.map((o) => (
+                    <li key={`${o.employeeName}-${o.number}-${o.formType}`}>
+                      {o.employeeName} already has {o.formType} {o.number} on {o.inclusiveFrom} to {o.inclusiveTo}
+                    </li>
+                  ))}
+                </ul>
+              }
+              confirmLabel="Restore anyway"
+              confirmClass={btn.primary}
+              error={acting.error}
+              pending={acting.pending}
+              onConfirm={() => setArchived(false, true)}
+              onCancel={() => setOverlaps(null)}
             />
           </>
         )}

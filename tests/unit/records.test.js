@@ -443,3 +443,18 @@ test('archive and restore; archived numbers are never reused; blanks can be arch
   expect(await archiveRecord(pool, { id: 99999 })).toEqual({ ok: false, error: 'Record not found' });
   expect(await restoreRecord(pool, { id: 99999 })).toEqual({ ok: false, error: 'Record not found' });
 });
+
+test('restore warns when a filled record now overlaps another; confirm restores; blanks skip the check', async () => {
+  const r = (await create({ inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22' })).data;
+  await archiveRecord(pool, { id: r.id });
+  await create({ employeeIds: [ids.emps[0], ids.emps[1]], inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' }); // 2026-11-2
+  const res = await restoreRecord(pool, { id: r.id });
+  expect(res.error).toBe('Overlapping records');
+  expect(res.overlaps.map((o) => `${o.employeeName} ${o.number}`)).toEqual(['Emp 1 2026-11-2']);
+  expect((await row(r.id)).archived_at).not.toBeNull();
+  expect(await restoreRecord(pool, { id: r.id, confirmOverlap: true })).toEqual({ ok: true, data: { id: r.id, number: '2026-11-1' } });
+  expect((await row(r.id)).archived_at).toBeNull();
+  const b = (await blank()).data;
+  await archiveRecord(pool, { id: b.id });
+  expect((await restoreRecord(pool, { id: b.id })).ok).toBe(true);
+});

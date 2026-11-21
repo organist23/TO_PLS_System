@@ -346,11 +346,30 @@ export function updateRecord(pool, input) {
   });
 }
 
-async function setArchived(pool, id, archived) {
-  const [[rec]] = await pool.query('SELECT id, number FROM records WHERE id = ?', [Number(id) || 0]);
-  if (!rec) return { ok: false, error: 'Record not found' };
-  await pool.query(`UPDATE records SET archived_at = ${archived ? 'COALESCE(archived_at, NOW())' : 'NULL'} WHERE id = ?`, [rec.id]);
-  return { ok: true, data: rec };
+async function findRecord(pool, id) {
+  const [[rec]] = await pool.query(
+    'SELECT id, number, status, inclusive_from, inclusive_to FROM records WHERE id = ?',
+    [Number(id) || 0],
+  );
+  return rec;
 }
-export const archiveRecord = (pool, { id }) => setArchived(pool, id, true);
-export const restoreRecord = (pool, { id }) => setArchived(pool, id, false);
+
+export async function archiveRecord(pool, { id }) {
+  const rec = await findRecord(pool, id);
+  if (!rec) return { ok: false, error: 'Record not found' };
+  await pool.query('UPDATE records SET archived_at = COALESCE(archived_at, NOW()) WHERE id = ?', [rec.id]);
+  return { ok: true, data: { id: rec.id, number: rec.number } };
+}
+
+// US-9: a filled record coming back warns like a save would (US-5); a blank has no dates or people to check.
+export async function restoreRecord(pool, { id, confirmOverlap }) {
+  const rec = await findRecord(pool, id);
+  if (!rec) return { ok: false, error: 'Record not found' };
+  if (rec.status === 'filled' && confirmOverlap !== true) {
+    const [employees] = await pool.query('SELECT employee_id AS id FROM record_employees WHERE record_id = ?', [rec.id]);
+    const overlaps = await findOverlaps(pool, employees, rec.inclusive_from, rec.inclusive_to, rec.id);
+    if (overlaps.length) return { ok: false, error: 'Overlapping records', overlaps };
+  }
+  await pool.query('UPDATE records SET archived_at = NULL WHERE id = ?', [rec.id]);
+  return { ok: true, data: { id: rec.id, number: rec.number } };
+}
