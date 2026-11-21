@@ -54,18 +54,24 @@ Picked up from Phase 1: numbers only from the shared counter (now `withCounter`)
 
 Conventions later phases inherit: schema changes are appended to `MIGRATIONS` in `db.js`, never by editing `schema.sql` (v1 snapshot); an ALTER must be safe to re-run. `records.status` is `filled` or `blank`; a blank has NULL dates, `''` destination/purpose and no `record_employees`, so every reader of records filters `status = 'filled'` where dates or people matter (out today, reports, overlaps). Printing reads the record snapshot through `getPrintable` + `buildWorkbook`; the template cell map lives in `print.js` `LAYOUTS`. A template update keeps one sheet named `Form`, fit to one A4 page, and no whitespace-only cells (unit test). Font changes in exceljs go through `restyle` (styles are shared between cells). Files the app opens are only those it just saved (`records:openExport`). Tests reset `pls_to_test` by deleting rows; a test that alters the schema restores it.
 
-### Phase 3 — Browse, edit, archive NEXT
+### Phase 3 — Browse, edit, archive ✅ DONE (merged `a2cf211`, 2026-11-21)
 
 Paused 2026-11-21: print preview (Phase 7) first, at the user's request. Not started, no branch. Plan: `docs/superpowers/plans/2026-11-21-phase-3-browse-edit-archive.md`.
 Staff need to find, fix and void what Phases 1–2 create before monitoring and reports build on it.
-Covers US-8, US-9, US-10.
+Covers US-8, US-9, US-10. US-9 amended 2026-11-21: Restore warns on overlap (user decision in Phase 3 review).
 
 - Search and filter records, edit details, archive and restore.
 - Reprint any active record from its detail view.
 
-**Done when:** in the packaged app, records are found by each search kind and filter, opened, edited (number, form and office unchanged), reprinted with the new values, archived and restored. Every US-8, US-9, US-10 condition passes, and the full E2E suite passes (end of Part one).
+**Done when:** in the packaged app, records are found by each search kind and filter, opened, edited (number, form and office unchanged), reprinted with the new values, archived and restored. Every US-8, US-9, US-10 condition passes, and the full E2E suite passes (end of Part one). — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe: all US-8, US-9 (incl. restore overlap warning), US-10 conditions; 200-row limit and literal `%`/`_`/`'` search at unit level (89/89 full E2E, 127/127 unit). Results: `docs/test-results/PHASE-3-TEST-RESULTS.md`. Regression: full suite (business rule changed, end of Part one), US-1, US-3, US-4, US-5, US-6, US-7, US-15, CW-1 pass.
+
+Shipped as `src/main/records.js`: `listRecords`, `getRecord`, `updateRecord`, `archiveRecord`, `restoreRecord` (`validateDetails` gains `keep`, `findOverlaps` gains `excludeId`). `src/main/directory.js`: `likeLiteral` now exported. `src/main/print.js`: `getPrintable` (now on `getRecord`). `src/main/ipc.js` routes `records:list`, `records:get`, `records:update`, `records:archive`, `records:restore`. `src/renderer/App.jsx` (navigation `go(page, params)`). `src/renderer/pages/Records.jsx`. `src/renderer/pages/NewRecord.jsx` (edit mode, fill from params). `src/renderer/components/PrintFlow.jsx`: `usePrint`. `components/ConfirmDialog.jsx` (title id from `useId`). Tables: none.
 
 Deliberately not built, and why: "out today" and per-office reports, because Phase 4 owns US-11 and US-12. An edit history, because no story asks for it.
+
+Picked up from Phase 7: every print path goes through `print(rec)`, now `usePrint()` shared by New record and Records. Picked up from Phases 1–2: readers needing dates or people filter `status = 'filled'`, archive-only removal.
+
+Conventions later phases inherit: pages receive `{ params, go }` and every `go()` remounts the page, so page state starts fresh. Record search uses `likeLiteral` with `ESCAPE '\\'` on parameters. Active records are `archived_at IS NULL` (filled and blank); reports and "out today" also need `status = 'filled'`. Edits keep people and signatories already on a record valid even if archived since; only new ones must be active. The overlap warning (`findOverlaps` with `excludeId`) runs on create, fill, edit and restore of a filled record. Lists cap at 200 rows with a `truncated` flag.
 
 ### Phase 7 — Print preview ✅ DONE (merged `7b53b1d`, 2026-11-21)
 
@@ -87,7 +93,7 @@ Conventions later phases inherit: every print path goes through `print(rec)` (pr
 
 ## Part two — Monitoring and data safety
 
-### Phase 4 — Out today and per-office reports LATER
+### Phase 4 — Out today and per-office reports NEXT
 
 Covers US-11, US-12.
 
