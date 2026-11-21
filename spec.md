@@ -85,6 +85,7 @@ Changed 2026-11-21: restore from archive, archive blocked while a signatory is a
 
 ### US-5: Create a PLS or TO record
 Changed 2026-11-21: required fields, optional vehicle and return, editable filed date, employee details kept as saved, overlap warning (user decisions before Phase 1 plan).
+Changed 2026-11-21: purpose limited to 360 characters so it fits the 4 printed lines (user decision before Phase 2 plan).
 
 **As** HR staff, **I want** to choose PLS or TO and the issuing office, then fill in the details, **so that** the record gets the next number automatically.
 
@@ -107,20 +108,29 @@ Changed 2026-11-21: required fields, optional vehicle and return, editable filed
 - [ ] An archived employee or signatory cannot be picked.
 - [ ] Clicking Save twice creates one record with one number.
 - [ ] Two numbers are never the same for one counter, even after a restore (US-14).
+- [ ] A purpose longer than 360 characters is rejected with "At most 360 characters".
 
 ### US-6: Print a filled form as .xlsx
+Changed 2026-11-21: date and time formats, Mayor's TO prints the recommending signatory, where Print is offered, empty optional fields stay as blank lines (user decisions before Phase 2 plan).
+
 **As** HR staff, **I want** to print a record on the official PLS or TO layout, **so that** it can be signed on paper.
 
 **Accepts when:**
 - [ ] Print generates an .xlsx matching the issuing office's and form type's template: logo, A4 portrait, the record's number, date, names with designation and employment status, destination, vehicle, dates, times, purpose, and both signatory names and titles.
 - [ ] The file opens in Excel and prints on one A4 page.
 - [ ] Staff choose where to save it. The app offers to open it after saving.
+- [ ] Dates print as "November 20, 2026". Inclusive dates print as one range ("November 20-22, 2026", "November 30 - December 2, 2026"). Times print as "8:00 AM".
+- [ ] Every form prints both signatories' names and titles, including the Mayor's Office Travel Order, which uses the same layout as the SB forms (name, then title below).
+- [ ] An empty vehicle or return keeps the form's blank line for handwriting.
+- [ ] Print is offered right after a record is saved and for each blank form (US-7).
 
 **Rejects when:**
 - [ ] An archived record cannot be printed until it is restored.
 - [ ] A failed save (e.g. file open in Excel) shows an error and does not change the record.
 
 ### US-7: Issue a numbered blank form
+Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories fixed when filling (user decisions before Phase 2 plan).
+
 **As** HR staff, **I want** to print a blank form that already has a number, **so that** an employee can fill it by hand while the number stays reserved.
 
 **Accepts when:**
@@ -128,8 +138,12 @@ Changed 2026-11-21: required fields, optional vehicle and return, editable filed
 - [ ] It takes the next number from the same counter as US-5 and saves a record with status **Blank issued**.
 - [ ] The printed .xlsx has the number and signatories filled and all other fields blank.
 - [ ] Staff later open the Blank issued record, fill the details, and save. The number does not change and the status becomes **Filled**.
+- [ ] "Issue blank" asks for confirmation naming the form type and office and that it reserves the next number. Cancel reserves nothing.
+- [ ] The New record page lists Blank issued records with "Fill in" and "Print again".
+- [ ] Filling in uses the same rules as US-5 (required fields, 1 to 5 employees, purpose limit, overlap warning).
 
 **Rejects when:**
+- [ ] When filling in, form type, issuing office, number, and signatories cannot be changed. They stay as printed.
 - [ ] A Blank issued record does not appear in "who is out today" or office reports until it is filled.
 
 ### US-8: Edit a record

@@ -38,10 +38,15 @@ Conventions later phases inherit: a record number is never assigned outside `cre
 
 ### Phase 2 — Print filled and blank forms NEXT
 
-Covers US-6, US-7.
+Printing is the paper the office signs, and blank forms share the counter, so both come right after numbering.
+Covers US-6, US-7. Reopens Phase 1: US-5 purpose limited to 360 characters (needed by US-6) on 2026-11-21.
 
 - Filled .xlsx on the official layout for all 4 templates.
 - Numbered blank form that reserves a number and is filled later.
+
+**Done when:** in the packaged app, a saved record of each of the 4 kinds prints to an .xlsx with the hand-checked values in the template cells and fits one A4 page. A blank form reserves the next number, prints number and signatories only, and is filled in later under the same number. The full E2E suite passes, including CW-1.
+
+Deliberately not built, and why: reprint from a record list and printing archived records after restore, because Phase 3 owns US-8, US-9 and US-10.
 
 ### Phase 3 — Browse, edit, archive LATER
 
