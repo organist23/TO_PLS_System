@@ -1,4 +1,6 @@
 import path from 'node:path';
+import fs from 'node:fs';
+import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { _electron as electron } from '@playwright/test';
 import { freshTestDb, testConfig } from '../helpers/testDb.js';
@@ -10,14 +12,16 @@ export const NEW_PASSWORD = 'Test-pass-123'; // test database only
 export async function launchApp({ env = {} } = {}) {
   const { database } = testConfig(); // throws unless the name ends in _test
   const pool = await freshTestDb();
-  const appEnv = { ...process.env, DB_NAME: database, PLS_TO_ENV_FILE: path.join(root, '.env'), ...env };
+  // Pre-restore backups (US-14) go to a fresh temp folder, never the real app data folder.
+  const backupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'plsto-auto-'));
+  const appEnv = { ...process.env, DB_NAME: database, PLS_TO_ENV_FILE: path.join(root, '.env'), PLS_TO_BACKUP_DIR: backupDir, ...env };
   delete appEnv.ELECTRON_RUN_AS_NODE; // set by VS Code terminals; makes Electron start as plain Node
   const app = await electron.launch({
     ...(process.env.E2E_EXE ? { executablePath: process.env.E2E_EXE, args: [] } : { args: [root] }),
     env: appEnv,
   });
   const page = await app.firstWindow();
-  return { app, page, pool };
+  return { app, page, pool, backupDir };
 }
 
 export async function login(page, username = 'admin', password = 'admin') {
@@ -134,3 +138,9 @@ export async function openReturnedBlank(page) {
 
 export const pickDepartmentHead = (page, label = 'JUAN P. SANTOS — DEPARTMENT HEAD') =>
   page.getByLabel('Recommending approval (Department Head who signed)').selectOption({ label });
+
+// OS boundary fake for the folder and file pickers (US-13, US-14): returns this path, or cancels when null.
+export const mockOpenDialog = (app, filePath) =>
+  app.evaluate(({ dialog }, f) => {
+    dialog.showOpenDialog = async () => (f ? { canceled: false, filePaths: [f] } : { canceled: true, filePaths: [] });
+  }, filePath ?? null);
