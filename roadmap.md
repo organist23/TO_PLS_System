@@ -36,7 +36,7 @@ Picked up from Phase 0: conventions (IPC shape, ROUTES + allowlist, `text()`, ar
 
 Conventions later phases inherit: a record number is never assigned outside `createRecord`'s per-counter `GET_LOCK` (`plsto:<form>:<office>:<period>`) plus `MAX(seq)+1`. US-7 blank forms must reuse it. The period is the creation month in local time. Records hold snapshots (employee name, designation, status, office_id; signatory name and title), so printing reads the record, not the master lists. Overlap means inclusive dates intersect on an active record, and it warns with `overlaps` and is confirmed with `confirmOverlap: true`. Users approved: vehicle and return optional, date filed editable.
 
-### Phase 2 — Print filled and blank forms NEXT
+### Phase 2 — Print filled and blank forms ✅ DONE (merged `c275f64`, 2026-11-21)
 
 Printing is the paper the office signs, and blank forms share the counter, so both come right after numbering.
 Covers US-6, US-7. Reopens Phase 1: US-5 purpose limited to 360 characters (needed by US-6) on 2026-11-21.
@@ -44,11 +44,17 @@ Covers US-6, US-7. Reopens Phase 1: US-5 purpose limited to 360 characters (need
 - Filled .xlsx on the official layout for all 4 templates.
 - Numbered blank form that reserves a number and is filled later.
 
-**Done when:** in the packaged app, a saved record of each of the 4 kinds prints to an .xlsx with the hand-checked values in the template cells and fits one A4 page. A blank form reserves the next number, prints number and signatories only, and is filled in later under the same number. The full E2E suite passes, including CW-1.
+**Done when:** in the packaged app, a saved record of each of the 4 kinds prints to an .xlsx with the hand-checked values in the template cells and fits one A4 page. A blank form reserves the next number, prints number and signatories only, and is filled in later under the same number. The full E2E suite passes, including CW-1. — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe (OS save dialog and shell stubbed): all US-6 and US-7 conditions, US-5 purpose limit, CW-1 (63/63 full E2E, 103/103 unit). All 4 templates rendered in Excel with worst-case values and checked by eye. Results: `docs/test-results/PHASE-2-TEST-RESULTS.md`. Regression: full suite (schema change), US-1, US-3, US-4, US-5 pass.
+
+Shipped as `src/main/print.js`: `formatDate`, `formatRange`, `formatTime`, `wrapPurpose`, `getPrintable`, `buildWorkbook`. `src/main/templates/` (`pls-mayor`, `to-mayor`, `pls-sb`, `to-sb`.xlsx). `src/main/records.js`: `issueBlank`, `listBlank`, `fillBlank`, `createRecord` (now on shared `withCounter`). `src/main/db.js`: `migrate` with `MIGRATIONS` (v2). `src/main/ipc.js` routes `records:print`, `records:openExport`, `records:issueBlank`, `records:listBlank`, `records:fillBlank`, `registerIpc(ipcMain, pool, os)`. `src/renderer/pages/NewRecord.jsx` (Print, Issue blank form, Blank forms to fill, fill mode). Tables: records (status, nullable date_filed/inclusive_from/inclusive_to/departure_at), schema_version.
 
 Deliberately not built, and why: reprint from a record list and printing archived records after restore, because Phase 3 owns US-8, US-9 and US-10.
 
-### Phase 3 — Browse, edit, archive LATER
+Picked up from Phase 1: numbers only from the shared counter (now `withCounter`), record snapshots feed printing.
+
+Conventions later phases inherit: schema changes are appended to `MIGRATIONS` in `db.js`, never by editing `schema.sql` (v1 snapshot); an ALTER must be safe to re-run. `records.status` is `filled` or `blank`; a blank has NULL dates, `''` destination/purpose and no `record_employees`, so every reader of records filters `status = 'filled'` where dates or people matter (out today, reports, overlaps). Printing reads the record snapshot through `getPrintable` + `buildWorkbook`; the template cell map lives in `print.js` `LAYOUTS`. A template update keeps one sheet named `Form`, fit to one A4 page, and no whitespace-only cells (unit test). Font changes in exceljs go through `restyle` (styles are shared between cells). Files the app opens are only those it just saved (`records:openExport`). Tests reset `pls_to_test` by deleting rows; a test that alters the schema restores it.
+
+### Phase 3 — Browse, edit, archive NEXT
 
 Covers US-8, US-9, US-10.
 
