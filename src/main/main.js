@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.js';
@@ -35,7 +35,12 @@ async function start() {
     await migrate(config);
     const pool = createPool(config);
     await ensureAdmin(pool);
-    const { endSession } = registerIpc(ipcMain, pool);
+    // Looked up at call time so E2E tests can stub the OS dialog and shell.
+    const { endSession } = registerIpc(ipcMain, pool, {
+      documentsDir: app.getPath('documents'),
+      showSaveDialog: (opts) => dialog.showSaveDialog(win, opts),
+      openPath: (file) => shell.openPath(file),
+    });
     const id = win.webContents.id;
     win.on('closed', () => endSession(id));
     await win.loadFile(indexHtml);

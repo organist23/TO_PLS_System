@@ -1,7 +1,10 @@
 import { login, changePassword } from './auth.js';
 import * as directory from './directory.js';
 import * as signatories from './signatories.js';
-import { createRecord } from './records.js';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { createRecord, issueBlank, listBlank, fillBlank } from './records.js';
+import { getPrintable, buildWorkbook } from './print.js';
 
 // Access levels: public, logged in (password change may be pending), ready (logged in, password changed).
 const ROUTES = {
@@ -44,13 +47,43 @@ const ROUTES = {
     ].map(([ch, fn]) => [ch, ['ready', ({ pool, p }) => fn(pool, p)]]),
   ),
   'records:create': ['ready', ({ pool, user, p }) => createRecord(pool, p, { userId: user.id })],
+  'records:issueBlank': ['ready', ({ pool, user, p }) => issueBlank(pool, p, { userId: user.id })],
+  'records:listBlank': ['ready', ({ pool }) => listBlank(pool)],
+  'records:fillBlank': ['ready', ({ pool, user, p }) => fillBlank(pool, p, { userId: user.id })],
+  'records:print': ['ready', async ({ pool, id, p, os, exported }) => {
+    const rec = await getPrintable(pool, p.id);
+    if (!rec.ok) return rec;
+    const buffer = await buildWorkbook(rec.data);
+    const { canceled, filePath } = await os.showSaveDialog({
+      defaultPath: path.join(os.documentsDir, `${rec.data.form_type} ${rec.data.number}.xlsx`),
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }],
+    });
+    if (canceled || !filePath) return { ok: true, data: { canceled: true } };
+    try {
+      await fs.writeFile(filePath, buffer);
+    } catch (e) {
+      console.error('[ipc] records:print write', e);
+      return { ok: false, error: 'Could not save the file. If it is open in Excel, close it and try again.' };
+    }
+    exported.set(id, filePath);
+    return { ok: true, data: { path: filePath } };
+  }],
+  // Opens only the file this window just saved: a renderer-supplied path could launch anything.
+  'records:openExport': ['ready', async ({ id, os, exported }) => {
+    const file = exported.get(id);
+    if (!file) return { ok: false, error: 'Nothing to open yet.' };
+    const error = await os.openPath(file);
+    return error ? { ok: false, error } : { ok: true };
+  }],
 };
 
 // preload.cjs keeps its own copy of this list (a sandboxed preload cannot import ESM); ipc.test.js checks they match.
 export const CHANNELS = Object.keys(ROUTES);
 
-export function registerIpc(ipcMain, pool) {
+// os = { showSaveDialog(opts), openPath(file), documentsDir }: Electron's dialog/shell, injected so tests can fake them.
+export function registerIpc(ipcMain, pool, os = {}) {
   const sessions = new Map(); // webContents id → User; lives only in the main process
+  const exported = new Map(); // webContents id → last file saved by records:print
   for (const [channel, [access, fn]] of Object.entries(ROUTES)) {
     ipcMain.handle(channel, async (event, payload) => {
       const id = event.sender.id;
@@ -58,7 +91,7 @@ export function registerIpc(ipcMain, pool) {
       if (access !== 'public' && !user) return { ok: false, error: 'Not logged in' };
       if (access === 'ready' && user.mustChangePassword) return { ok: false, error: 'Change your password first' };
       try {
-        return await fn({ pool, sessions, id, user, p: payload ?? {} });
+        return await fn({ pool, sessions, id, user, p: payload ?? {}, os, exported });
       } catch (e) {
         console.error(`[ipc] ${channel}`, e);
         return { ok: false, error: 'Something went wrong. Please try again.' };
