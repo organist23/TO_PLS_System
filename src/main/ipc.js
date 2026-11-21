@@ -10,6 +10,7 @@ import {
 import { getPrintable, buildStackWorkbook, previewOf } from './print.js';
 import { outOn, officeReport, reportFile } from './reports.js';
 import { backupName, freePath, writeBackup, restoreBackup } from './backup.js';
+import { listUsers, createUser, resetPassword, setActive } from './users.js';
 
 // Save dialog, write, and remember the file so records:openExport can open it. Used by every export.
 async function saveExport({ id, os, exported }, defaultName, buffer) {
@@ -28,7 +29,8 @@ async function saveExport({ id, os, exported }, defaultName, buffer) {
   return { ok: true, data: { path: filePath } };
 }
 
-// Access levels: public, logged in (password change may be pending), ready (logged in, password changed).
+// Access levels: public, logged in (password change may be pending), ready (logged in, password changed),
+// admin (ready and role admin, US-2).
 const ROUTES = {
   'auth:login': ['public', async ({ pool, sessions, id, p }) => {
     const user = await login(pool, p.username, p.password);
@@ -118,13 +120,13 @@ const ROUTES = {
     }
   }],
   // US-14: the file is picked in the main process and remembered, so a renderer-supplied path is never restored.
-  'backup:pick': ['ready', async ({ id, os, picked }) => {
+  'backup:pick': ['admin', async ({ id, os, picked }) => {
     const file = await os.chooseBackupFile();
     if (!file) return { ok: true, data: { canceled: true } };
     picked.set(id, file);
     return { ok: true, data: { file: path.basename(file) } };
   }],
-  'backup:restore': ['ready', async ({ pool, id, os, picked, sessions }) => {
+  'backup:restore': ['admin', async ({ pool, id, os, picked, sessions }) => {
     const file = picked.get(id);
     if (!file) return { ok: false, error: 'Choose a backup file first.' };
     picked.delete(id);
@@ -142,6 +144,19 @@ const ROUTES = {
     sessions.clear(); // the users table was replaced: everyone logs in again
     return { ok: true, data: { file: path.basename(file), path: before } };
   }],
+  // US-2. Disabling or resetting someone ends their open sessions, so the change takes effect at once.
+  'users:list': ['admin', ({ pool }) => listUsers(pool)],
+  'users:create': ['admin', ({ pool, p }) => createUser(pool, p)],
+  'users:resetPassword': ['admin', async ({ pool, sessions, p }) => {
+    const res = await resetPassword(pool, p);
+    if (res.ok) endSessionsOf(sessions, res.data.id);
+    return res;
+  }],
+  'users:setActive': ['admin', async ({ pool, sessions, user, p }) => {
+    const res = await setActive(pool, p, { actorId: user.id });
+    if (res.ok && !res.data.active) endSessionsOf(sessions, res.data.id);
+    return res;
+  }],
   // Opens only the file this window just saved: a renderer-supplied path could launch anything.
   'records:openExport': ['ready', async ({ id, os, exported }) => {
     const file = exported.get(id);
@@ -150,6 +165,10 @@ const ROUTES = {
     return error ? { ok: false, error } : { ok: true };
   }],
 };
+
+function endSessionsOf(sessions, userId) {
+  for (const [id, u] of sessions) if (u.id === userId) sessions.delete(id);
+}
 
 // preload.cjs keeps its own copy of this list (a sandboxed preload cannot import ESM); ipc.test.js checks they match.
 export const CHANNELS = Object.keys(ROUTES);
@@ -165,7 +184,8 @@ export function registerIpc(ipcMain, pool, os = {}) {
       const id = event.sender.id;
       const user = sessions.get(id);
       if (access !== 'public' && !user) return { ok: false, error: 'Not logged in' };
-      if (access === 'ready' && user.mustChangePassword) return { ok: false, error: 'Change your password first' };
+      if ((access === 'ready' || access === 'admin') && user.mustChangePassword) return { ok: false, error: 'Change your password first' };
+      if (access === 'admin' && user.role !== 'admin') return { ok: false, error: 'Admins only' };
       try {
         return await fn({ pool, sessions, id, user, p: payload ?? {}, os, exported, picked });
       } catch (e) {

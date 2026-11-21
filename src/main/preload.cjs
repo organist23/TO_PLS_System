@@ -11,6 +11,7 @@ const ALLOWED = [
   'records:list', 'records:get', 'records:update', 'records:archive', 'records:restore',
   'reports:out', 'reports:office', 'reports:export',
   'backup:create', 'backup:pick', 'backup:restore',
+  'users:list', 'users:create', 'users:resetPassword', 'users:setActive',
   'records:nextNumbers', 'records:findBlank', 'records:unusedBlanks', 'records:deleteUnusedBlanks',
 ];
 

@@ -375,3 +375,47 @@ test('an invalid file is refused, data unchanged, still logged in', async () => 
   expect(await c('backup:restore')).toEqual({ ok: false, error: 'This file is not a backup of the PLS-TO Records System. Nothing was changed.' });
   expect((await c('offices:list', {})).data.map((o) => o.name)).toEqual(['KEEP']);
 });
+
+// ---------- Phase 6: user accounts, admin-only routes ----------
+
+const ADMIN_ROUTES = ['users:list', 'users:create', 'users:resetPassword', 'users:setActive', 'backup:pick', 'backup:restore'];
+
+// Admin on sender 1; encoder1 created by the admin, logged in on sender 2 with its password changed.
+async function usersSetup() {
+  await loginChanged(1);
+  const enc = await call(1, 'users:create', { username: 'encoder1', fullName: 'Ana Cruz', role: 'encoder', password: 'Temp-pass-1' });
+  await call(2, 'auth:login', { username: 'encoder1', password: 'Temp-pass-1' });
+  await call(2, 'auth:changePassword', { newPassword: 'Encoder-pass-1' });
+  return enc.data.id;
+}
+
+test('an encoder is refused on every admin route but keeps backup and records', async () => {
+  await usersSetup();
+  for (const ch of ADMIN_ROUTES) expect(await call(2, ch, {}), ch).toEqual({ ok: false, error: 'Admins only' });
+  expect((await call(2, 'records:list', {})).ok).toBe(true);
+  expect((await call(1, 'users:list')).data.map((u) => u.username)).toEqual(['admin', 'encoder1']);
+});
+
+test('admin routes need a changed password like every other route', async () => {
+  await call(1, 'auth:login', { username: 'admin', password: 'admin' });
+  for (const ch of ADMIN_ROUTES) expect(await call(1, ch, {}), ch).toEqual({ ok: false, error: 'Change your password first' });
+});
+
+test('disabling or resetting a user ends their open session', async () => {
+  const id = await usersSetup();
+  expect((await call(2, 'records:list', {})).ok).toBe(true);
+  expect((await call(1, 'users:resetPassword', { id, password: 'Reset-pass-2' })).ok).toBe(true);
+  expect(await call(2, 'records:list', {})).toEqual({ ok: false, error: 'Not logged in' });
+  await call(2, 'auth:login', { username: 'encoder1', password: 'Reset-pass-2' });
+  await call(2, 'auth:changePassword', { newPassword: 'Encoder-pass-2' });
+  expect((await call(1, 'users:setActive', { id, active: false })).ok).toBe(true);
+  expect(await call(2, 'records:list', {})).toEqual({ ok: false, error: 'Not logged in' });
+  expect(await call(2, 'auth:login', { username: 'encoder1', password: 'Encoder-pass-2' })).toEqual({ ok: false, error: 'Invalid username or password' });
+});
+
+test('the admin cannot disable their own account through the route', async () => {
+  await usersSetup();
+  const [[admin]] = await pool.query("SELECT id FROM users WHERE username = 'admin'");
+  expect(await call(1, 'users:setActive', { id: admin.id, active: false })).toEqual({ ok: false, error: 'You cannot disable your own account.' });
+  expect((await call(1, 'records:list', {})).ok).toBe(true);
+});
