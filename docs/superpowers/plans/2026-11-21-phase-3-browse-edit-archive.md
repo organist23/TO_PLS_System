@@ -79,7 +79,7 @@
 
 ### Task 5: Records page
 
-**Files:** Create `src/renderer/pages/Records.jsx`. Modify `src/renderer/pages/NewRecord.jsx`.
+**Files:** Create `src/renderer/pages/Records.jsx`, `src/renderer/components/PrintFlow.jsx`. Modify `src/renderer/pages/NewRecord.jsx`.
 - **Filters row:** `Search` (250 ms debounce), `Form` (All/PLS/TO), `Issuing office` (All/Mayor's Office/Sangguniang Bayan), `Employee office` (All + active offices), `Travel from`, `Travel to`, `Status` (Active/Filled/Blank issued/Archived). States: loading, error + Retry, `No records found`, and the truncated note.
 - **Table:** Number, Form, Office, Names, Destination, Travel dates (`2026-11-20 to 2026-11-22`, or `—` for a blank), Status. A row has an `Open <number>` button.
 - **Detail panel** (replaces the table, `Back to list`): every field, employees with designation and status, both signatories, and the status.
@@ -87,7 +87,7 @@
     - Filled and active: `Edit`, `Print`, `Archive`.
     - Blank: `Fill in`, `Print`, `Archive`.
     - Archived: `Restore` only.
-  - Print uses the same flow and banners as New record, including `Saved to` and `Open file`.
+  - Print goes through the preview first (Phase 7 convention). Revised 2026-11-21: move NewRecord's print state, preview dialog, `saveFromPreview` and `openFile` into `usePrint()` in `src/renderer/components/PrintFlow.jsx` (returns `{ print, printing, openFile, dialog }`), used by both pages unchanged in behavior, with `Saved to` and `Open file`.
   - Archive uses ConfirmDialog with the exact copy, then shows the banner `Archived <number>` and returns to the list.
   - Restore: no confirmation, banner `Restored <number>`.
 - **Edit / Fill in:** `go('newRecord', { mode: 'edit' | 'fill', id })`.
@@ -119,7 +119,7 @@
 ```
 Feature: Phase 3, US-8, US-9, US-10
 Feature tests: unit and integration for listRecords, getRecord, updateRecord, archive/restore, ipc routes. E2E for US-8, US-9, US-10
-Regression E2E: US-5, US-6, US-7 (records.js validateDetails/findOverlaps/getPrintable and NewRecord.jsx changed), US-1/3/4 via full run
+Regression E2E: US-5, US-6, US-7, US-15 (records.js validateDetails/findOverlaps/getPrintable and NewRecord.jsx and its preview flow changed), US-1/3/4 via full run
 System E2E: CW-1 (touches NewRecord and print)
 Full E2E run: yes, business rule changed (overlap excludes the edited record) and Part one completes with this phase
 ```
