@@ -1,4 +1,4 @@
-import { fieldErrors, text } from './directory.js';
+import { fieldErrors, text, likeLiteral } from './directory.js';
 import { ISSUING_OFFICES, activeSignatory } from './signatories.js';
 
 export const FORM_TYPES = ['PLS', 'TO'];
@@ -220,4 +220,70 @@ export function fillBlank(pool, input, { userId }) {
     }
     return { ok: true, data: { id: rec.id, number: rec.number, formType: rec.form_type } };
   });
+}
+
+const STATUS_WHERE = {
+  active: 'r.archived_at IS NULL',
+  filled: "r.archived_at IS NULL AND r.status = 'filled'",
+  blank: "r.archived_at IS NULL AND r.status = 'blank'",
+  archived: 'r.archived_at IS NOT NULL',
+};
+const LIST_LIMIT = 200;
+
+export async function listRecords(pool, { search = '', formType = '', issuingOffice = '', officeId = null, from = '', to = '', status = 'active' } = {}) {
+  if (from && to && to < from) return fieldErrors({ to: 'End date is before start date' });
+  const where = [STATUS_WHERE[status] ?? STATUS_WHERE.active];
+  const params = [];
+  if (text(search)) {
+    const like = likeLiteral(text(search));
+    where.push(`(r.number LIKE ? ESCAPE '\\\\' OR r.destination LIKE ? ESCAPE '\\\\' OR r.purpose LIKE ? ESCAPE '\\\\'
+      OR EXISTS (SELECT 1 FROM record_employees s WHERE s.record_id = r.id AND s.full_name LIKE ? ESCAPE '\\\\'))`);
+    params.push(like, like, like, like);
+  }
+  if (FORM_TYPES.includes(formType)) {
+    where.push('r.form_type = ?');
+    params.push(formType);
+  }
+  if (ISSUING_OFFICES[issuingOffice]) {
+    where.push('r.issuing_office = ?');
+    params.push(issuingOffice);
+  }
+  if (officeId) {
+    where.push('EXISTS (SELECT 1 FROM record_employees o WHERE o.record_id = r.id AND o.office_id = ?)');
+    params.push(Number(officeId));
+  }
+  // Overlap with the travel dates; a blank has NULL dates, so it never matches a range.
+  if (from) {
+    where.push('r.inclusive_to >= ?');
+    params.push(from);
+  }
+  if (to) {
+    where.push('r.inclusive_from <= ?');
+    params.push(to);
+  }
+  const [rows] = await pool.query(
+    `SELECT r.id, r.number, r.form_type AS formType, r.issuing_office AS issuingOffice, r.status,
+            r.archived_at IS NOT NULL AS archived,
+            (SELECT GROUP_CONCAT(n.full_name ORDER BY n.position SEPARATOR ', ') FROM record_employees n WHERE n.record_id = r.id) AS names,
+            r.destination, r.inclusive_from AS inclusiveFrom, r.inclusive_to AS inclusiveTo, r.date_filed AS dateFiled
+       FROM records r
+      WHERE ${where.join(' AND ')}
+      ORDER BY r.id DESC
+      LIMIT ${LIST_LIMIT + 1}`,
+    params,
+  );
+  return {
+    ok: true,
+    data: { rows: rows.slice(0, LIST_LIMIT).map((r) => ({ ...r, archived: r.archived === 1 })), truncated: rows.length > LIST_LIMIT },
+  };
+}
+
+export async function getRecord(pool, id) {
+  const [[record]] = await pool.query('SELECT * FROM records WHERE id = ?', [Number(id) || 0]);
+  if (!record) return { ok: false, error: 'Record not found' };
+  const [employees] = await pool.query(
+    'SELECT employee_id, office_id, full_name, designation, employment_status FROM record_employees WHERE record_id = ? ORDER BY position',
+    [record.id],
+  );
+  return { ok: true, data: { ...record, employees } };
 }

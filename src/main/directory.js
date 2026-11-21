@@ -4,7 +4,7 @@ export const fieldErrors = (errors) => ({ ok: false, error: 'Check the highlight
 export const text = (v) => String(v ?? '').trim().replace(/\s+/g, ' ');
 export const isDup = (e) => e.code === 'ER_DUP_ENTRY';
 // LIKE wildcards in user input must match literally.
-const likeLiteral = (s) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+export const likeLiteral = (s) => `%${s.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
 
 // ---------- offices ----------
 
