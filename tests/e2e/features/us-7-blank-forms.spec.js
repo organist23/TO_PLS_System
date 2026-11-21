@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const ExcelJS = createRequire(import.meta.url)('exceljs'); // Playwright's ESM loader cannot import exceljs directly
-import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, saveFromPreview } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, saveFromPreview, blankFormsSection, recordForm } from '../helpers.js';
 
 test.describe('US-7 Issue a numbered blank form', () => {
   let app, page, pool, file;
@@ -35,8 +35,8 @@ test.describe('US-7 Issue a numbered blank form', () => {
   }
 
   test('Issue blank asks first; Cancel reserves nothing', async () => {
-    await page.getByRole('radio', { name: 'TO', exact: true }).check();
-    await page.getByRole('radio', { name: 'Sangguniang Bayan' }).check();
+    await blankFormsSection(page).getByRole('radio', { name: 'TO', exact: true }).check();
+    await blankFormsSection(page).getByRole('radio', { name: 'Sangguniang Bayan' }).check();
     await button('Issue blank form').click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading')).toHaveText('Issue a blank TO for Sangguniang Bayan?');
@@ -74,10 +74,10 @@ test.describe('US-7 Issue a numbered blank form', () => {
     await issue();
     await blanksTable().getByRole('button', { name: `Fill in ${thisMonth()}-1` }).click();
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(`Fill in PLS ${thisMonth()}-1`);
-    await expect(page.getByRole('radio', { name: 'TO', exact: true })).toBeDisabled();
-    await expect(page.getByRole('radio', { name: 'Sangguniang Bayan' })).toBeDisabled();
-    await expect(page.getByLabel('Approved by')).toHaveCount(0);
-    await expect(page.getByText('VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR', { exact: true })).toBeVisible();
+    await expect(recordForm(page).getByRole('radio', { name: 'TO', exact: true })).toBeDisabled();
+    await expect(recordForm(page).getByRole('radio', { name: 'Sangguniang Bayan' })).toBeDisabled();
+    await expect(recordForm(page).getByLabel('Approved by')).toHaveCount(0);
+    await expect(recordForm(page).getByText('VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR', { exact: true })).toBeVisible();
 
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Ana Cruz — MHO' });
     await button('Add').click();

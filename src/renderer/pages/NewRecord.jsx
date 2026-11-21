@@ -53,6 +53,10 @@ export default function NewRecord({ params = {}, go }) {
   const [issueOpen, setIssueOpen] = useState(false);
   const [issuing, setIssuing] = useState(false);
   const [issueCount, setIssueCount] = useState('1');
+  // Print blank forms has its own choices: nothing typed in the Save form is used for blank forms.
+  const [stack, setStack] = useState({ formType: 'PLS', issuingOffice: 'MAYOR', recommendingId: '', approvingId: '' });
+  const [stackErrors, setStackErrors] = useState({});
+  const [stackError, setStackError] = useState(''); // an issue failure with no field of its own
   const [estimate, setEstimate] = useState(null); // numbers the stack would get: { first, last } | 'loading' | { error }
   const [lookup, setLookup] = useState({ formType: 'PLS', number: '', pending: false, error: '', encodedId: null });
   const [months, setMonths] = useState([]); // past months with unused blanks (US-18)
@@ -104,6 +108,12 @@ export default function NewRecord({ params = {}, go }) {
     setLists({ status: 'ready', employees: emps.data, signatories: sigs.data, defaults: defs.data });
   }, [params.id, params.mode]);
   useEffect(() => void load(), [load]);
+
+  useEffect(() => {
+    if (lists.status !== 'ready') return;
+    const d = lists.defaults[stack.issuingOffice];
+    setStack((s) => ({ ...s, recommendingId: d.recommending ?? '', approvingId: d.approving ?? '' }));
+  }, [lists, stack.issuingOffice]);
 
   // Signatories follow the issuing office's defaults whenever the office changes or the lists (re)load.
   // An edit keeps the record's signatories; a blank being filled has its own (and no default Department Head).
@@ -177,31 +187,36 @@ export default function NewRecord({ params = {}, go }) {
   // The confirmation shows the numbers the stack would get; the server assigns the real ones (US-16).
   async function openIssue() {
     const n = Number(issueCount);
-    if (!(Number.isInteger(n) && n >= 1 && n <= 50)) return setErrors({ count: 'Enter a number from 1 to 50' });
-    setErrors({});
+    if (!(Number.isInteger(n) && n >= 1 && n <= 50)) return setStackErrors({ count: 'Enter a number from 1 to 50' });
+    setStackErrors({});
     setIssueOpen(true);
     setEstimate('loading');
     const seq = ++estimateSeq.current;
-    const res = await window.api.invoke('records:nextNumbers', { formType: form.formType, issuingOffice: form.issuingOffice, count: n });
+    const res = await window.api.invoke('records:nextNumbers', { formType: stack.formType, issuingOffice: stack.issuingOffice, count: n });
     if (seq === estimateSeq.current) setEstimate(res.ok ? res.data : { error: res.error });
   }
 
   async function issueBlank() {
     setIssuing(true);
-    setErrors({});
+    setStackErrors({});
+    setStackError('');
     setFormError('');
     setNotice('');
     setSaved(null);
     const res = await window.api.invoke('records:issueBlank', {
-      formType: form.formType,
-      issuingOffice: form.issuingOffice,
-      recommendingId: Number(form.recommendingId) || null,
-      approvingId: Number(form.approvingId) || null,
+      formType: stack.formType,
+      issuingOffice: stack.issuingOffice,
+      recommendingId: Number(stack.recommendingId) || null,
+      approvingId: Number(stack.approvingId) || null,
       count: issueCount,
     });
     setIssuing(false);
     setIssueOpen(false);
-    if (!res.ok) return res.errors ? setErrors(res.errors) : setFormError(res.error);
+    if (!res.ok) {
+      const shown = ['count', 'recommendingId', 'approvingId'];
+      if (res.errors && Object.keys(res.errors).every((k) => shown.includes(k))) return setStackErrors(res.errors);
+      return setStackError(res.errors ? Object.values(res.errors).join(' ') : res.error);
+    }
     const { formType, ids, numbers } = res.data;
     setNotice(ids.length === 1
       ? `Issued blank ${formType} ${numbers[0]}`
@@ -274,7 +289,16 @@ export default function NewRecord({ params = {}, go }) {
     return s ? `${s.name} — ${s.title}` : 'Not chosen';
   };
   const count = Number(issueCount);
-  const mayorStack = form.issuingOffice === 'MAYOR';
+  const mayorStack = stack.issuingOffice === 'MAYOR';
+  const stackSelect = (key, role) => (
+    <select id={`stack-${key}`} className={inputClass} value={stack[key]} onChange={(e) => setStack({ ...stack, [key]: e.target.value })}
+      aria-invalid={!!stackErrors[key]} aria-describedby={stackErrors[key] ? `stack-${key}-error` : undefined}>
+      <option value="">Choose a signatory</option>{signatoryOptions(role)}
+    </select>
+  );
+  const noSigners = (role) => signatoryOptions(role).length === 0 && (
+    <p className="mt-1 text-sm text-slate-600">No active {role} signatories. Add them on Signatories.</p>
+  );
 
   return (
     <section className="space-y-6">
@@ -298,7 +322,7 @@ export default function NewRecord({ params = {}, go }) {
       {printing.error && <Banner>{printing.error}</Banner>}
       {formError && <Banner>{formError}</Banner>}
 
-      <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-8 rounded-md border border-slate-200 bg-white p-6">
+      <form id="record-form" onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-8 rounded-md border border-slate-200 bg-white p-6">
         <div className="grid gap-6 sm:grid-cols-3">
           <RadioGroup legend="Form" name="formType" value={form.formType} options={[['PLS', 'PLS'], ['TO', 'TO']]} disabled={!!filling || !!editing}
             onChange={(v) => setForm({ ...form, formType: v })} />
@@ -368,9 +392,6 @@ export default function NewRecord({ params = {}, go }) {
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Recommending approval" id="rec-recommendingId" error={errors.recommendingId}>
             <select {...field('recommendingId')}><option value="">Choose a signatory</option>{signatoryOptions('recommending')}</select>
-            {mayorStack && (
-              <p className="mt-1 text-sm text-slate-600">Not printed on Mayor's Office blank forms: the Department Head signs the paper.</p>
-            )}
             {signatoryOptions('recommending').length === 0 && (
               <p className="mt-1 text-sm text-slate-600">No active recommending signatories. Add them on Signatories.</p>
             )}
@@ -388,20 +409,50 @@ export default function NewRecord({ params = {}, go }) {
           <button type="submit" className={btn.primary} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
           {filling || editing ? (
             <button type="button" className={btn.secondary} onClick={editing ? () => go('records', { openId: editing.id }) : cancelFill}>Cancel</button>
-          ) : (
-            <div className="flex items-start gap-3">
-              <label htmlFor="rec-count" className="pt-2 text-sm font-medium text-slate-700">How many</label>
-              <div className="w-24">
-                <input id="rec-count" type="number" min="1" max="50" className={`${inputClass} mt-0`}
-                  value={issueCount} onChange={(e) => setIssueCount(e.target.value)}
-                  aria-invalid={!!errors.count} aria-describedby={errors.count ? 'rec-count-error' : undefined} />
-                {errors.count && <p id="rec-count-error" className="mt-1 text-sm text-red-700">{errors.count}</p>}
-              </div>
-              <button type="button" className={btn.secondary} onClick={openIssue}>Issue blank form</button>
-            </div>
-          )}
+          ) : null}
         </div>
       </form>
+
+      {!editing && !params.mode && !filling && (
+      <section aria-labelledby="stack-heading" className="space-y-6 rounded-md border border-slate-200 bg-white p-6">
+        <div>
+          <h2 id="stack-heading" className="text-base font-semibold text-slate-900">Print blank forms</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Empty numbered forms for the desk. Employees fill them in by hand. When one comes back, encode it below.
+          </p>
+        </div>
+        <div className="grid gap-6 sm:grid-cols-2">
+          <RadioGroup legend="Form" name="stackFormType" value={stack.formType} options={[['PLS', 'PLS'], ['TO', 'TO']]}
+            onChange={(v) => setStack({ ...stack, formType: v })} />
+          <RadioGroup legend="Issuing office" name="stackIssuingOffice" value={stack.issuingOffice} options={Object.entries(ISSUING_OFFICES)}
+            onChange={(v) => setStack({ ...stack, issuingOffice: v })} />
+          {mayorStack ? (
+            <div>
+              <p className="text-sm font-medium text-slate-700">Recommending approval</p>
+              <p className="mt-2 text-sm text-slate-600">Left empty: the Department Head of whoever takes the form signs the paper.</p>
+            </div>
+          ) : (
+            <Field label="Recommending approval" id="stack-recommendingId" error={stackErrors.recommendingId}>
+              {stackSelect('recommendingId', 'recommending')}{noSigners('recommending')}
+            </Field>
+          )}
+          <Field label="Approved by" id="stack-approvingId" error={stackErrors.approvingId}>
+            {stackSelect('approvingId', 'approving')}{noSigners('approving')}
+          </Field>
+        </div>
+        {stackError && <Banner>{stackError}</Banner>}
+        <div className="flex flex-wrap items-start gap-3">
+          <label htmlFor="rec-count" className="pt-2 text-sm font-medium text-slate-700">How many</label>
+          <div className="w-24">
+            <input id="rec-count" type="number" min="1" max="50" className={`${inputClass} mt-0`}
+              value={issueCount} onChange={(e) => setIssueCount(e.target.value)}
+              aria-invalid={!!stackErrors.count} aria-describedby={stackErrors.count ? 'rec-count-error' : undefined} />
+            {stackErrors.count && <p id="rec-count-error" className="mt-1 text-sm text-red-700">{stackErrors.count}</p>}
+          </div>
+          <button type="button" className={btn.secondary} onClick={openIssue}>Issue blank form</button>
+        </div>
+      </section>
+      )}
 
       {!editing && !params.mode && (
       <form onSubmit={findReturned} aria-labelledby="encode-heading" className="space-y-3 rounded-md border border-slate-200 bg-white p-6">
@@ -487,8 +538,8 @@ export default function NewRecord({ params = {}, go }) {
       <ConfirmDialog
         open={issueOpen}
         title={count > 1
-          ? `Issue ${count} blank ${form.formType} for ${ISSUING_OFFICES[form.issuingOffice]}?`
-          : `Issue a blank ${form.formType} for ${ISSUING_OFFICES[form.issuingOffice]}?`}
+          ? `Issue ${count} blank ${stack.formType} for ${ISSUING_OFFICES[stack.issuingOffice]}?`
+          : `Issue a blank ${stack.formType} for ${ISSUING_OFFICES[stack.issuingOffice]}?`}
         message={
           <div className="space-y-1">
             <p>
@@ -496,8 +547,8 @@ export default function NewRecord({ params = {}, go }) {
                 : estimate?.error ? estimate.error
                   : count > 1 ? `Numbers: ${estimate?.first} to ${estimate?.last}` : `Number: ${estimate?.first}`}
             </p>
-            <p>Recommending approval: {mayorStack ? DEPT_HEAD_ON_PAPER : signerName(form.recommendingId)}</p>
-            <p>Approved by: {signerName(form.approvingId)}</p>
+            <p>Recommending approval: {mayorStack ? DEPT_HEAD_ON_PAPER : signerName(stack.recommendingId)}</p>
+            <p>Approved by: {signerName(stack.approvingId)}</p>
             <p>This reserves {count > 1 ? `${count} numbers` : 'the next number'}.</p>
           </div>
         }
