@@ -130,9 +130,22 @@ Picked up from Phase 2: numbers only from `withCounter`, now N at a time. Picked
 
 Conventions later phases inherit: `records.recommending_*` can be NULL only on a Mayor's Office blank; a filled record always has one. A number is unique only with its form type, so lookups use form type + number. Permanent delete exists only in `deleteUnusedBlanks` (status `blank`, past period); everything else stays archive-only. A multi-form .xlsx is one sheet per form, all sheets selected, workbook active tab 0. E2E creates past-month rows by SQL, since the app numbers only in the current month.
 
-### Phase 5 — Backup and restore NEXT
+### Phase 9 — Paper-first encoding NEXT
 
-On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request), NEXT again after Phase 8.
+Reopens Phase 1: direct record creation (US-5 Save form and `records:create`) is removed; US-5 rules apply when encoding. Reopens Phase 8: the New record page becomes Forms (Print blank forms, Encode a returned form, Blank forms to fill).
+Every PLS/TO starts as a printed blank form; HR types details only when encoding the returned paper (user decision 2026-11-21).
+Covers US-5 (changed), CW-1 (changed).
+
+- Forms page: no direct-input form; the fill-in form appears only for Fill in and for Edit (US-8).
+- `records:create` and `createRecord` removed; tests and E2E seeds create records by issuing a blank and filling it.
+
+**Done when:** in the packaged app, there is no way to save a record without a blank form first (no Save-only form, `records:create` refused by the preload allowlist), every US-5 condition passes through Encode, CW-1 passes as US-1 → US-3 → US-4 → US-16 → US-17 → US-6, and the full E2E suite passes.
+
+Deliberately not built, and why: a walk-in exception (user decision: one path, blank then encode).
+
+### Phase 5 — Backup and restore LATER
+
+On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request), NEXT again after Phase 8, then LATER again for Phase 9 (user request).
 
 Covers US-13, US-14.
 

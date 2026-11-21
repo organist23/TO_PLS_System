@@ -84,6 +84,7 @@ Changed 2026-11-21: restore from archive, archive blocked while a signatory is a
 - [ ] Archiving needs a confirmation that names the signatory. Cancel changes nothing.
 
 ### US-5: Create a PLS or TO record
+Changed 2026-11-21: paper first. A record is created only by issuing a blank form (US-7, US-16) and encoding the returned paper (US-17); there is no direct input. These rules apply when encoding; the number and signatories are set when the blank is issued (user decision before Phase 9).
 Changed 2026-11-21: required fields, optional vehicle and return, editable filed date, employee details kept as saved, overlap warning (user decisions before Phase 1 plan).
 Changed 2026-11-21: purpose limited to 360 characters so it fits the 4 printed lines (user decision before Phase 2 plan).
 
@@ -109,6 +110,7 @@ Changed 2026-11-21: purpose limited to 360 characters so it fits the 4 printed l
 - [ ] Clicking Save twice creates one record with one number.
 - [ ] Two numbers are never the same for one counter, even after a restore (US-14).
 - [ ] A purpose longer than 360 characters is rejected with "At most 360 characters".
+- [ ] No record can be created without first issuing a blank form: the app has no "type a whole application and Save" form and refuses direct-create requests.
 
 ### US-6: Print a filled form as .xlsx
 Changed 2026-11-21: Print opens the preview (US-15) before the save dialog (user request after Phase 2).
@@ -300,7 +302,7 @@ Changed 2026-11-21: the date range filter matches travel (inclusive) dates; repr
 - [ ] Filled records, and blanks filled in the meantime, are never deleted.
 
 ## Critical workflows
-- CW-1: Issue and print a record: US-1 → US-3 → US-4 → US-5 → US-6
+- CW-1: Issue and print a record: US-1 → US-3 → US-4 → US-16 → US-17 → US-6 (changed 2026-11-21: paper first, the record is encoded from a returned blank)
 - CW-2: Blank form lifecycle: US-1 → US-7 → US-8 → US-11
 - CW-3: Recover data: US-13 → US-14 → US-1 → US-10
 - CW-4: Blank stack lifecycle: US-16 → US-17 → US-11 → US-18
