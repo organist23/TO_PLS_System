@@ -149,15 +149,25 @@ Picked up from Phase 8: blanks, Encode by number, Fill in with the Department He
 
 Conventions later phases inherit: a record is created only by `issueBlanks` then `fillBlank`; there is no direct-create path or route. Tests make records the same way (`seedRecord` through IPC, `openReturnedBlank` through the UI). The page key stays `newRecord`, its label is `Forms`; E2E finds the page heading with `{ name: 'Forms', exact: true }`. `created_by` is the user who issued the blank.
 
-### Phase 5 — Backup and restore NEXT
+### Phase 5 — Backup and restore ✅ DONE (merged `b91230e`, 2026-11-21)
 
-On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request), NEXT again after Phase 8, then LATER again for Phase 9 (user request), NEXT again after Phase 9.
+On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request), NEXT again after Phase 8, then LATER again for Phase 9 (user request), NEXT again after Phase 9. Started on the user's request after Phase 9.
 
 Covers US-13, US-14.
 
 - .sql backup to a chosen folder, restore with automatic pre-restore backup.
 
-### Phase 6 — User account management LATER
+**Done when:** in the packaged app, a backup writes a dated .sql to the chosen folder, a restore saves the current data first, replaces it, and logs everyone out, and an invalid file changes nothing. Every US-13, US-14 and CW-3 condition passes. — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe: all US-13, US-14 and CW-3 conditions; unit: round trip with quotes, backslashes, newlines and Ñ, invalid, truncated, crafted and orphaned files refused with data unchanged, numbering after restore, older schema migrated (124/124 full E2E, 186/186 unit). Results: `docs/test-results/PHASE-5-TEST-RESULTS.md`. Regression: full suite (every table replaced by a restore), all stories and CW-1 to CW-4 pass.
+
+Shipped as `src/main/backup.js`: `TABLES`, `backupName`, `freePath`, `writeBackup`, `restoreBackup`. `src/main/db.js`: `SCHEMA_VERSION`. `src/main/ipc.js` routes `backup:create`, `backup:pick`, `backup:restore` (`picked` map; `os.chooseFolder`, `os.chooseBackupFile`, `os.backupDir`, `os.dbConfig`). `src/main/main.js` (folder and file pickers, `PLS_TO_BACKUP_DIR`). `src/renderer/pages/Backup.jsx`. `src/renderer/pages/Login.jsx` (`notice`). `src/renderer/App.jsx` (menu `Backup`, `signOut`). Tables: none (restore replaces all of them).
+
+Deliberately not built, and why: admin-only backup and restore, because the spec limits only user management to admins (revisit with Phase 6 / US-2). Scheduled automatic backups, because no story asks for them.
+
+Picked up from Phase 2: `migrate` and `MIGRATIONS`, now also run on a restored database. Picked up from Phase 0: sessions in the main process, cleared after a restore.
+
+Conventions later phases inherit: a new table must be added to `TABLES` in `backup.js` (parents before children) and, if it has foreign keys, to `ORPHANS`, or backups will not carry it. Backup files start with `-- PLS-TO Records System backup v1 schema <n>` and end with `-- end of backup`; restore accepts only the statement shapes `writeBackup` emits, on `TABLES`. A restore never touches live tables before the single `RENAME TABLE` swap. Files the user picks are remembered in the main process (`exported`, `picked`); a renderer-supplied path is never opened or restored. E2E sets `PLS_TO_BACKUP_DIR` to a temp folder and stubs `dialog.showOpenDialog` with `mockOpenDialog`.
+
+### Phase 6 — User account management NEXT
 
 Covers US-2.
 
