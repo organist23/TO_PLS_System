@@ -140,7 +140,7 @@ Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories f
 **Accepts when:**
 - [ ] Staff choose form type and issuing office, then "Issue blank".
 - [ ] It takes the next number from the same counter as US-5 and saves a record with status **Blank issued**.
-- [ ] The printed .xlsx has the number and signatories filled and all other fields blank. On a Mayor's Office blank the recommending line is empty with the title "DEPARTMENT HEAD" under it.
+- [ ] The printed .xlsx has the number and signatories filled and all other fields blank. On a Mayor's Office blank the recommending signatory is left empty as on the official paper: the PLS keeps its empty line with "DEPARTMENT HEAD" under it, the Travel Order keeps its empty space.
 - [ ] Staff later open the Blank issued record, fill the details, and save. The number does not change and the status becomes **Filled**.
 - [ ] "Issue blank" asks for confirmation naming the form type and office and that it reserves the next number. Cancel reserves nothing.
 - [ ] The New record page lists Blank issued records with "Fill in" and "Print again".

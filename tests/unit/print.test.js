@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import ExcelJS from 'exceljs';
-import { formatDate, formatRange, formatTime, wrapPurpose, buildWorkbook, previewOf } from '../../src/main/print.js';
+import { formatDate, formatRange, formatTime, wrapPurpose, buildWorkbook, buildStackWorkbook, previewOf } from '../../src/main/print.js';
+import JSZip from 'jszip';
 
 test('formatDate', () => {
   expect(formatDate('2026-11-20')).toBe('November 20, 2026');
@@ -192,4 +193,47 @@ test.each(['PLS-MAYOR', 'TO-MAYOR', 'PLS-SB', 'TO-SB'])('previewOf %s shows exac
     }
   }
   expect(fromPreview).toEqual(fromFile);
+});
+
+// ---------- Phase 8: blank stacks ----------
+
+const workbookOf = async (buffer) => {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  return wb;
+};
+const blankOf = (formType, issuingOffice, seq, over = {}) => record(formType, issuingOffice, {
+  status: 'blank', seq, number: `${issuingOffice === 'SB' ? 'SB ' : ''}2026-11-${seq}`, date_filed: null, destination: '',
+  inclusive_from: null, inclusive_to: null, departure_at: null, purpose: '', employees: [], ...over,
+});
+
+describe.each(Object.keys(MAP))('stack %s', (key) => {
+  const [form, office] = key.split('-');
+  test('one sheet per number, each with its own number, the logo, A4 fit to one page, and all selected', async () => {
+    const buffer = await buildStackWorkbook([5, 6, 7].map((n) => blankOf(form, office, n)));
+    const wb = await workbookOf(buffer);
+    const prefix = office === 'SB' ? 'SB ' : '';
+    expect(wb.worksheets.map((w) => w.name)).toEqual([5, 6, 7].map((n) => `${prefix}2026-11-${n}`));
+    wb.worksheets.forEach((ws, i) => {
+      expect(ws.getCell(MAP[key].number).text).toBe(MAP[key].numberText.replace('-7', `-${5 + i}`));
+      expect(ws.getImages()).toHaveLength(1);
+      expect(ws.pageSetup).toMatchObject({ fitToPage: true, fitToWidth: 1, fitToHeight: 1, paperSize: 9, orientation: 'portrait' });
+      expect(ws.model.merges.length).toBe(wb.worksheets[0].model.merges.length);
+    });
+    // Excel prints the selected (grouped) sheets: every sheet selected and the active tab inside the workbook.
+    const zip = await JSZip.loadAsync(buffer);
+    const sheets = Object.keys(zip.files).filter((f) => /^xl\/worksheets\/sheet\d+\.xml$/.test(f));
+    expect(sheets).toHaveLength(3);
+    for (const f of sheets) expect(await zip.file(f).async('string')).toContain('tabSelected="1"');
+    expect(await zip.file('xl/workbook.xml').async('string')).toMatch(/activeTab="0"/);
+  });
+});
+
+test("a Mayor's Office blank leaves the recommending signatory as on the paper", async () => {
+  const none = { recommending_name: null, recommending_title: null };
+  const pls = await read(await buildWorkbook(blankOf('PLS', 'MAYOR', 5, none)));
+  expect([pls.getCell('A31').text, pls.getCell('A32').text]).toEqual(['', 'DEPARTMENT HEAD']);
+  const to = await read(await buildWorkbook(blankOf('TO', 'MAYOR', 5, none)));
+  expect([to.getCell('A29').text, to.getCell('A30').text]).toEqual(['', '']);
+  expect(to.getCell('A36').text).toBe('VINCENT E. HERMOSO');
 });

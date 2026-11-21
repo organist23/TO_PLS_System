@@ -84,7 +84,8 @@ test.describe('US-9 Archive and restore a record', () => {
   });
 
   test('a Blank issued form can be archived and its number stays reserved', async () => {
-    const blank = (await invoke(page, 'records:issueBlank', { formType: 'PLS', issuingOffice: 'MAYOR', recommendingId: seed.signatories.deptHead, approvingId: seed.signatories.mayor })).data;
+    const issued = (await invoke(page, 'records:issueBlank', { formType: 'PLS', issuingOffice: 'MAYOR', recommendingId: seed.signatories.deptHead, approvingId: seed.signatories.mayor })).data;
+    const blank = { id: issued.ids[0], number: issued.numbers[0] };
     expect(blank.number).toBe(`${m}-2`);
     await page.getByLabel('Search').fill(`${m}-2`);
     await expect(listNumbers(page)).toHaveText([`${m}-2`]);

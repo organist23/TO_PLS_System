@@ -43,9 +43,9 @@ export function usePrint() {
   }
 
   async function saveFromPreview() {
-    const { id } = preview;
+    const { id, ids } = preview;
     previewRef.current.close();
-    const res = await window.api.invoke('records:print', { id });
+    const res = await window.api.invoke('records:print', ids?.length > 1 ? { ids } : { id });
     if (!res.ok) return setPrinting({ pending: false, path: '', error: res.error });
     setPrinting({ pending: false, path: res.data.canceled ? '' : res.data.path, error: '' });
   }
@@ -63,9 +63,14 @@ export function usePrint() {
       className="m-auto max-h-[90vh] w-full max-w-4xl overflow-auto rounded-md p-6 shadow-[0_15px_35px_hsla(0,0%,0%,.2)] backdrop:bg-slate-900/40"
     >
       <div className="flex items-center justify-between gap-4">
-        <h2 id="preview-title" className="text-lg font-semibold text-slate-900">
-          Preview {preview?.formType} {preview?.number}
-        </h2>
+        <div>
+          <h2 id="preview-title" className="text-lg font-semibold text-slate-900">
+            Preview {preview?.formType} {preview?.number}
+          </h2>
+          {preview?.ids?.length > 1 && (
+            <p className="text-sm text-slate-600">Showing {preview.number}. The file has {preview.ids.length} forms.</p>
+          )}
+        </div>
         {preview && (
           <div className="flex gap-3">
             <button type="button" className={btn.secondary} onClick={() => previewRef.current.close()}>Close</button>

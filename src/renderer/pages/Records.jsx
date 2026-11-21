@@ -159,7 +159,7 @@ export default function Records({ params = {}, go }) {
                 ['Inclusive dates', travel(rec.inclusive_from, rec.inclusive_to)],
                 ['Departure', dateTime(rec.departure_at)],
                 ['Return', dateTime(rec.return_at)],
-                ['Recommending approval', `${rec.recommending_name} — ${rec.recommending_title}`],
+                ['Recommending approval', rec.recommending_name == null ? 'Department Head (signs on the paper)' : `${rec.recommending_name} — ${rec.recommending_title}`],
                 ['Approved by', `${rec.approving_name} — ${rec.approving_title}`],
               ].map(([label, value]) => (
                 <div key={label}>

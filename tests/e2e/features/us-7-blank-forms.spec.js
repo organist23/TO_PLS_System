@@ -58,7 +58,8 @@ test.describe('US-7 Issue a numbered blank form', () => {
     expect(ws.getCell('H12').text).toMatch(/^DATE:_+$/);
     expect(ws.getCell('A14').text).toBe('');
     expect(ws.getCell('A20').text).toBe('DESTINATION:');
-    expect([ws.getCell('A31').text, ws.getCell('A37').text]).toEqual(['JUAN P. SANTOS', 'VINCENT E. HERMOSO']);
+    // US-7 changed 2026-11-21: empty Department Head line, as on the official PLS paper.
+    expect([ws.getCell('A31').text, ws.getCell('A32').text, ws.getCell('A37').text]).toEqual(['', 'DEPARTMENT HEAD', 'VINCENT E. HERMOSO']);
   });
 
   test('the blank form is listed with Fill in and Print again', async () => {
@@ -76,17 +77,22 @@ test.describe('US-7 Issue a numbered blank form', () => {
     await expect(page.getByRole('radio', { name: 'TO', exact: true })).toBeDisabled();
     await expect(page.getByRole('radio', { name: 'Sangguniang Bayan' })).toBeDisabled();
     await expect(page.getByLabel('Approved by')).toHaveCount(0);
-    await expect(page.getByText('VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR')).toBeVisible();
+    await expect(page.getByText('VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR', { exact: true })).toBeVisible();
 
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Ana Cruz — MHO' });
     await button('Add').click();
     await page.getByLabel('Destination').fill('Treasury');
     await page.getByLabel('Departure').fill('2026-11-21T09:00');
     await page.getByLabel('Purpose').fill('Errand');
+    // US-7 changed: the Department Head who signed is required and has no default.
+    await expect(page.getByLabel('Recommending approval (Department Head who signed)')).toHaveValue('');
+    await button('Save').click();
+    await expect(page.locator('#rec-recommendingId-error')).toHaveText('Choose an active recommending signatory');
+    await page.getByLabel('Recommending approval (Department Head who signed)').selectOption({ label: 'JUAN P. SANTOS — DEPARTMENT HEAD' });
     await button('Save').click();
     await expect(page.getByRole('status')).toHaveText(`Saved PLS ${thisMonth()}-1`);
-    const [[r]] = await pool.query('SELECT number, status, destination, approving_name FROM records');
-    expect(r).toEqual({ number: `${thisMonth()}-1`, status: 'filled', destination: 'Treasury', approving_name: 'VINCENT E. HERMOSO' });
+    const [[r]] = await pool.query('SELECT number, status, destination, approving_name, recommending_name FROM records');
+    expect(r).toEqual({ number: `${thisMonth()}-1`, status: 'filled', destination: 'Treasury', approving_name: 'VINCENT E. HERMOSO', recommending_name: 'JUAN P. SANTOS' });
     await expect(blanksTable()).toContainText('No blank forms waiting');
   });
 
@@ -129,6 +135,7 @@ test.describe('US-7 Issue a numbered blank form', () => {
     await page.getByLabel('Inclusive to').fill('2026-11-11');
     await page.getByLabel('Departure').fill('2026-11-11T09:00');
     await page.getByLabel('Purpose').fill('Errand');
+    await page.getByLabel('Recommending approval (Department Head who signed)').selectOption({ label: 'JUAN P. SANTOS — DEPARTMENT HEAD' });
     await button('Save').click();
     await expect(page.getByRole('dialog')).toContainText(`Ana Cruz already has PLS ${thisMonth()}-1 on 2026-11-10 to 2026-11-12`);
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();

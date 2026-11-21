@@ -33,6 +33,7 @@ test('CW-2 blank form lifecycle', async () => {
     await page.getByLabel('Inclusive to').fill(localDay(0));
     await page.getByLabel('Departure').fill(`${localDay(0)}T08:00`);
     await page.getByLabel('Purpose').fill('Submit reports');
+    await page.getByLabel('Recommending approval (Department Head who signed)').selectOption({ label: 'JUAN P. SANTOS — DEPARTMENT HEAD' });
     await button('Save').click();
     await expect(page.getByRole('status')).toHaveText(`Saved PLS ${m}-1`);
 

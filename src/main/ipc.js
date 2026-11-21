@@ -3,8 +3,11 @@ import * as directory from './directory.js';
 import * as signatories from './signatories.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { createRecord, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord } from './records.js';
-import { getPrintable, buildWorkbook, previewOf } from './print.js';
+import {
+  createRecord, issueBlanks, nextNumbers, listBlank, findBlank, unusedBlankMonths, deleteUnusedBlanks, fillBlank,
+  listRecords, getRecord, updateRecord, archiveRecord, restoreRecord,
+} from './records.js';
+import { getPrintable, buildStackWorkbook, previewOf } from './print.js';
 import { outOn, officeReport, reportFile } from './reports.js';
 
 // Save dialog, write, and remember the file so records:openExport can open it. Used by every export.
@@ -70,17 +73,30 @@ const ROUTES = {
   'records:archive': ['ready', ({ pool, p }) => archiveRecord(pool, p)],
   'records:restore': ['ready', ({ pool, p }) => restoreRecord(pool, p)],
   'records:create': ['ready', ({ pool, user, p }) => createRecord(pool, p, { userId: user.id })],
-  'records:issueBlank': ['ready', ({ pool, user, p }) => issueBlank(pool, p, { userId: user.id })],
+  'records:issueBlank': ['ready', ({ pool, user, p }) => issueBlanks(pool, { count: 1, ...p }, { userId: user.id })],
+  'records:nextNumbers': ['ready', ({ pool, p }) => nextNumbers(pool, p)],
+  'records:findBlank': ['ready', ({ pool, p }) => findBlank(pool, p)],
+  'records:unusedBlanks': ['ready', ({ pool }) => unusedBlankMonths(pool)],
+  'records:deleteUnusedBlanks': ['ready', ({ pool, p }) => deleteUnusedBlanks(pool, p)],
   'records:listBlank': ['ready', ({ pool }) => listBlank(pool)],
   'records:fillBlank': ['ready', ({ pool, user, p }) => fillBlank(pool, p, { userId: user.id })],
   'records:preview': ['ready', async ({ pool, p }) => {
     const rec = await getPrintable(pool, p.id);
     return rec.ok ? { ok: true, data: await previewOf(rec.data) } : rec;
   }],
+  // { id } for one form, { ids } for a stack (US-16): one file, one sheet per form.
   'records:print': ['ready', async (ctx) => {
-    const rec = await getPrintable(ctx.pool, ctx.p.id);
-    if (!rec.ok) return rec;
-    return saveExport(ctx, `${rec.data.form_type} ${rec.data.number}.xlsx`, await buildWorkbook(rec.data));
+    const ids = Array.isArray(ctx.p.ids) ? [...new Set(ctx.p.ids.map(Number))] : [ctx.p.id];
+    if (ids.length < 1 || ids.length > 50) return { ok: false, error: 'Choose 1 to 50 forms to print.' };
+    const records = [];
+    for (const id of ids) {
+      const rec = await getPrintable(ctx.pool, id);
+      if (!rec.ok) return rec;
+      records.push(rec.data);
+    }
+    const [first, last] = [records[0], records[records.length - 1]];
+    const name = records.length === 1 ? `${first.form_type} ${first.number}` : `${first.form_type} ${first.number} to ${last.number}`;
+    return saveExport(ctx, `${name}.xlsx`, await buildStackWorkbook(records));
   }],
   'reports:out': ['ready', ({ pool, p }) => outOn(pool, p)],
   'reports:office': ['ready', ({ pool, p }) => officeReport(pool, p)],
