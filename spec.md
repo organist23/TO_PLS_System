@@ -167,6 +167,7 @@ Changed 2026-11-21: people already on a record stay valid when edited, overlap w
 
 ### US-9: Archive and restore a record
 Changed 2026-11-21: Blank issued forms can be archived too (user decision before Phase 3 plan).
+Changed 2026-11-21: Restore warns on overlap (user decision in Phase 3 review).
 
 **As** HR staff, **I want** to archive a wrong or cancelled record, **so that** it leaves the active list without losing its number.
 
@@ -174,6 +175,7 @@ Changed 2026-11-21: Blank issued forms can be archived too (user decision before
 - [ ] Archive asks for confirmation naming the record number. Cancel changes nothing.
 - [ ] An archived record is hidden from the default list, reports, and "out today".
 - [ ] The "Archived" filter shows archived records. Restore returns a record to the active list.
+- [ ] Restoring a filled record lists overlapping active records for its employees (US-5 warning) with "Restore anyway" or Cancel. Cancel keeps it archived. A Blank issued record restores with no check.
 - [ ] A Blank issued form can be archived (lost or spoiled paper). Its number stays reserved.
 
 **Rejects when:**

@@ -114,6 +114,10 @@
 
 ---
 
+### Task 8: Restore overlap warning (Amend 2026-11-21, US-9)
+- `restoreRecord(pool, { id, confirmOverlap })`: a filled record runs `findOverlaps` on its saved employees and dates, excluding itself, and returns `{ ok: false, error: 'Overlapping records', overlaps }` unless `confirmOverlap`. A blank skips the check. Records page Restore shows the overlap dialog (`Restore anyway`, Cancel).
+- [ ] Unit and US-9 E2E tests first, mutation check, commit.
+
 ## Test scope
 
 ```
