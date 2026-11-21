@@ -7,7 +7,7 @@ const ALLOWED = [
   'employees:list', 'employees:create', 'employees:update', 'employees:archive', 'employees:restore',
   'signatories:list', 'signatories:create', 'signatories:update', 'signatories:archive', 'signatories:restore',
   'signatories:defaults', 'signatories:setDefault',
-  'records:create', 'records:issueBlank', 'records:listBlank', 'records:fillBlank', 'records:print', 'records:openExport',
+  'records:create', 'records:issueBlank', 'records:listBlank', 'records:fillBlank', 'records:print', 'records:openExport', 'records:preview',
 ];
 
 contextBridge.exposeInMainWorld('api', {
