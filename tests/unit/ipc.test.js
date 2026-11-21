@@ -306,3 +306,72 @@ test('records:print with the same id twice prints it once', async () => {
   await wb.xlsx.load(fsMod.readFileSync(res.data.path));
   expect(wb.worksheets).toHaveLength(1);
 });
+
+// ---------- Phase 5: backup and restore (folder and file pickers faked at the OS boundary) ----------
+
+async function backupSetup() {
+  const osMod = await import('node:os');
+  const pathMod = await import('node:path');
+  const fsMod = await import('node:fs');
+  const { testConfig } = await import('../helpers/testDb.js');
+  const dir = fsMod.mkdtempSync(pathMod.join(osMod.tmpdir(), 'plsto-bk-'));
+  const backupDir = pathMod.join(dir, 'auto');
+  const fake = { folder: dir, file: null };
+  const handlers = {};
+  registerIpc({ handle: (ch, fn) => (handlers[ch] = fn) }, pool, {
+    chooseFolder: async () => fake.folder,
+    chooseBackupFile: async () => fake.file,
+    backupDir,
+    dbConfig: testConfig(),
+  });
+  const c = (channel, payload, sender = 1) => handlers[channel]({ sender: { id: sender } }, payload);
+  for (const s of [1, 2]) {
+    await c('auth:login', { username: 'admin', password: s === 1 ? 'admin' : 'Test-pass-123' }, s);
+    if (s === 1) await c('auth:changePassword', { newPassword: 'Test-pass-123' }, 1);
+  }
+  return { c, dir, backupDir, fake, fsMod, pathMod };
+}
+
+test('backup routes need a changed password', async () => {
+  await call(1, 'auth:login', { username: 'admin', password: 'admin' });
+  for (const ch of ['backup:create', 'backup:pick', 'backup:restore']) {
+    expect(await call(1, ch, {})).toEqual({ ok: false, error: 'Change your password first' });
+  }
+});
+
+test('backup:create writes a dated .sql to the chosen folder; cancel writes nothing', async () => {
+  const { c, dir, fake, fsMod, pathMod } = await backupSetup();
+  const res = await c('backup:create');
+  expect(pathMod.dirname(res.data.path)).toBe(dir);
+  expect(pathMod.basename(res.data.path)).toMatch(/^pls-to-backup-\d{4}-\d{2}-\d{2}-\d{4}\.sql$/);
+  expect(fsMod.readFileSync(res.data.path, 'utf8')).toMatch(/^-- PLS-TO Records System backup v1 schema \d+\n/);
+  fake.folder = null;
+  expect(await c('backup:create')).toEqual({ ok: true, data: { canceled: true } });
+  expect(fsMod.readdirSync(dir)).toHaveLength(1);
+});
+
+test('backup:restore restores only the picked file, saves the current data first, and ends every session', async () => {
+  const { c, fake, backupDir, fsMod, pathMod } = await backupSetup();
+  const backup = (await c('backup:create')).data.path;
+  await c('offices:create', { name: 'ADDED AFTER BACKUP' });
+  expect(await c('backup:restore', { file: backup })).toEqual({ ok: false, error: 'Choose a backup file first.' });
+  fake.file = backup;
+  expect(await c('backup:pick')).toEqual({ ok: true, data: { file: pathMod.basename(backup) } });
+  const res = await c('backup:restore', { file: 'C:/somewhere/else.sql' }); // a renderer path is ignored
+  expect(res.data.file).toBe(pathMod.basename(backup));
+  expect(pathMod.dirname(res.data.path)).toBe(backupDir);
+  expect(fsMod.readFileSync(res.data.path, 'utf8')).toContain('ADDED AFTER BACKUP'); // the pre-restore backup holds the current data
+  const [offices] = await pool.query('SELECT name FROM offices');
+  expect(offices).toEqual([]);
+  for (const s of [1, 2]) expect(await c('offices:list', {}, s)).toEqual({ ok: false, error: 'Not logged in' });
+});
+
+test('an invalid file is refused, data unchanged, still logged in', async () => {
+  const { c, dir, fake, fsMod, pathMod } = await backupSetup();
+  await c('offices:create', { name: 'KEEP' });
+  fake.file = pathMod.join(dir, 'not-a-backup.sql');
+  fsMod.writeFileSync(fake.file, 'SELECT 1;\n');
+  await c('backup:pick');
+  expect(await c('backup:restore')).toEqual({ ok: false, error: 'This file is not a backup of the PLS-TO Records System. Nothing was changed.' });
+  expect((await c('offices:list', {})).data.map((o) => o.name)).toEqual(['KEEP']);
+});

@@ -40,6 +40,17 @@ async function start() {
       documentsDir: app.getPath('documents'),
       showSaveDialog: (opts) => dialog.showSaveDialog(win, opts),
       openPath: (file) => shell.openPath(file),
+      chooseFolder: async () => {
+        const r = await dialog.showOpenDialog(win, { title: 'Save the backup to', properties: ['openDirectory', 'createDirectory'] });
+        return r.canceled ? null : r.filePaths[0];
+      },
+      chooseBackupFile: async () => {
+        const r = await dialog.showOpenDialog(win, { title: 'Restore from a backup', properties: ['openFile'], filters: [{ name: 'Backup', extensions: ['sql'] }] });
+        return r.canceled ? null : r.filePaths[0];
+      },
+      // PLS_TO_BACKUP_DIR lets E2E keep pre-restore backups out of the real app data folder.
+      backupDir: process.env.PLS_TO_BACKUP_DIR ?? path.join(app.getPath('userData'), 'backups'),
+      dbConfig: config,
     });
     const id = win.webContents.id;
     win.on('closed', () => endSession(id));
