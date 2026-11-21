@@ -74,6 +74,7 @@ test('thrown error → generic message', async () => {
     expect(await call(1, 'employees:list', {})).toEqual({ ok: false, error: 'Something went wrong. Please try again.' });
   } finally {
     console.error = orig;
+    await pool.query('RENAME TABLE employees_gone TO employees'); // later tests reuse this database
   }
 });
 
