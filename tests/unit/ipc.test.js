@@ -178,8 +178,8 @@ test('records:print refuses an archived record', async () => {
 test('blank-form routes issue, list and fill', async () => {
   const { c, rec, appr } = await printSetup();
   const issued = await c('records:issueBlank', { formType: 'TO', issuingOffice: 'SB', recommendingId: rec, approvingId: appr });
-  expect(issued.data.number).toMatch(/^SB \d{4}-\d{2}-1$/);
-  expect((await c('records:listBlank')).data.map((r) => r.id)).toEqual([issued.data.id]);
+  expect(issued.data.numbers).toEqual([expect.stringMatching(/^SB \d{4}-\d{2}-1$/)]);
+  expect((await c('records:listBlank')).data.map((r) => r.id)).toEqual(issued.data.ids);
 });
 
 test('records:preview returns the form for a saved record and refuses an archived one', async () => {
@@ -249,4 +249,45 @@ test('reports:export cancelled writes nothing', async () => {
   const { c, dir, fsMod } = await printSetup({ dialogResult: { canceled: true } });
   expect(await c('reports:export', { from: '2026-11-01', to: '2026-11-30' })).toEqual({ ok: true, data: { canceled: true } });
   expect(fsMod.readdirSync(dir)).toEqual([]);
+});
+
+// ---------- Phase 8: blank stacks ----------
+
+test('blank stack routes need a changed password', async () => {
+  await call(1, 'auth:login', { username: 'admin', password: 'admin' });
+  for (const ch of ['records:nextNumbers', 'records:findBlank', 'records:unusedBlanks', 'records:deleteUnusedBlanks']) {
+    expect(await call(1, ch, {})).toEqual({ ok: false, error: 'Change your password first' });
+  }
+});
+
+test('issue a stack, see the estimate, find a number, print all pages into one file', async () => {
+  const { c, appr, dialogs, fsMod, pathMod } = await printSetup(); // one filled PLS already: <month>-1
+  const est = (await c('records:nextNumbers', { formType: 'PLS', issuingOffice: 'MAYOR', count: 3 })).data;
+  const issued = await c('records:issueBlank', { formType: 'PLS', issuingOffice: 'MAYOR', approvingId: appr, count: 3 });
+  expect(issued.data.numbers).toEqual([est.first, issued.data.numbers[1], est.last]);
+  expect((await c('records:findBlank', { formType: 'PLS', number: issued.data.numbers[1] })).data.id).toBe(issued.data.ids[1]);
+  const res = await c('records:print', { ids: issued.data.ids });
+  expect(pathMod.basename(dialogs[0].defaultPath)).toBe(`PLS ${est.first} to ${est.last}.xlsx`);
+  const ExcelJS = (await import('exceljs')).default;
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(fsMod.readFileSync(res.data.path));
+  expect(wb.worksheets.map((w) => w.name)).toEqual(issued.data.numbers);
+});
+
+test('records:print refuses a stack with an archived record, and more than 50 ids, before any dialog', async () => {
+  const { c, appr, dialogs } = await printSetup();
+  const { ids } = (await c('records:issueBlank', { formType: 'PLS', issuingOffice: 'MAYOR', approvingId: appr, count: 2 })).data;
+  await c('records:archive', { id: ids[1] });
+  expect(await c('records:print', { ids })).toEqual({ ok: false, error: 'Restore this record before printing.' });
+  expect(await c('records:print', { ids: Array(51).fill(ids[0]) })).toEqual({ ok: false, error: 'Choose 1 to 50 forms to print.' });
+  expect(dialogs).toHaveLength(0);
+});
+
+test('unused blanks of the current month are listed nowhere and cannot be deleted', async () => {
+  const { c, appr } = await printSetup();
+  await c('records:issueBlank', { formType: 'PLS', issuingOffice: 'MAYOR', approvingId: appr, count: 2 });
+  expect(await c('records:unusedBlanks', {})).toEqual({ ok: true, data: [] });
+  const d = new Date();
+  const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  expect(await c('records:deleteUnusedBlanks', { period })).toEqual({ ok: false, error: 'Only blanks of a past month can be deleted.' });
 });
