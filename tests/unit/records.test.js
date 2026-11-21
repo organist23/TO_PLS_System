@@ -3,7 +3,7 @@ import { freshTestDb, testConfig } from '../helpers/testDb.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee } from '../../src/main/directory.js';
 import { createSignatory, archiveSignatory, updateSignatory } from '../../src/main/signatories.js';
-import { createRecord, formatNumber, periodOf } from '../../src/main/records.js';
+import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank } from '../../src/main/records.js';
 
 let pool, ids;
 const NOV = new Date(2026, 10, 20, 9, 0);
@@ -163,3 +163,86 @@ test('a failed lock release after commit still reports success and does not bloc
   expect(free).toBe(1);
   expect(await numberOf({ employeeIds: [ids.emps[1]] })).toBe('2026-11-2');
 }, 20000);
+
+// ---------- Phase 2: purpose limit, blank forms ----------
+
+const blank = (over = {}, now = NOV) =>
+  issueBlank(pool, { formType: 'PLS', issuingOffice: 'MAYOR', recommendingId: ids.rec, approvingId: ids.appr, ...over }, { userId: ids.userId, now });
+const details = (over = {}) => {
+  const { formType, issuingOffice, recommendingId, approvingId, ...rest } = valid(over);
+  return rest;
+};
+const fill = (id, over = {}) => fillBlank(pool, { id, ...details(over) }, { userId: ids.userId });
+
+test('purpose: 360 characters ok, 361 rejected', async () => {
+  expect((await create({ purpose: 'a'.repeat(361) })).errors).toEqual({ purpose: 'At most 360 characters' });
+  expect((await create({ purpose: 'a'.repeat(360) })).ok).toBe(true);
+});
+
+test('blank and normal records share one counter', async () => {
+  expect((await blank()).data.number).toBe('2026-11-1');
+  expect(await numberOf({})).toBe('2026-11-2');
+  expect((await blank({ issuingOffice: 'SB', formType: 'TO' })).data.number).toBe('SB 2026-11-1');
+});
+
+test('issueBlank stores status blank with no dates or employees', async () => {
+  const { data } = await blank();
+  const [[r]] = await pool.query('SELECT status, date_filed, inclusive_from, departure_at, destination, purpose, approving_name FROM records WHERE id = ?', [data.id]);
+  expect(r).toEqual({ status: 'blank', date_filed: null, inclusive_from: null, departure_at: null, destination: '', purpose: '', approving_name: 'MAYOR' });
+  const [[{ n }]] = await pool.query('SELECT COUNT(*) AS n FROM record_employees');
+  expect(n).toBe(0);
+});
+
+test('issueBlank validates form, office and signatory roles', async () => {
+  expect((await blank({ formType: 'XX', issuingOffice: 'CITY', recommendingId: ids.appr })).errors).toEqual({
+    formType: 'Required', issuingOffice: 'Required', recommendingId: 'Choose an active recommending signatory',
+  });
+  expect(await count()).toBe(0);
+});
+
+test('listBlank lists blanks newest first and drops filled ones', async () => {
+  const a = (await blank()).data;
+  const b = (await blank({ formType: 'TO' })).data;
+  const list = (await listBlank(pool)).data;
+  expect(list.map((r) => r.number)).toEqual([b.number, a.number]);
+  expect(list[0]).toMatchObject({ formType: 'TO', issuingOffice: 'MAYOR', approvingName: 'MAYOR', approvingTitle: 'MUNICIPAL MAYOR' });
+  await fill(a.id);
+  expect((await listBlank(pool)).data.map((r) => r.number)).toEqual([b.number]);
+});
+
+test('fillBlank keeps the number and printed signatories, ignores form, office and signatory changes', async () => {
+  const { data } = await blank();
+  const other = (await createSignatory(pool, { name: 'OTHER', title: 'ACTING MAYOR', role: 'approving' })).data.id;
+  const res = await fillBlank(pool, { id: data.id, ...details(), formType: 'TO', issuingOffice: 'SB', approvingId: other }, { userId: ids.userId });
+  expect(res).toEqual({ ok: true, data: { id: data.id, number: '2026-11-1', formType: 'PLS' } });
+  const [[r]] = await pool.query('SELECT status, form_type, issuing_office, approving_name, destination, date_filed FROM records WHERE id = ?', [data.id]);
+  expect(r).toEqual({ status: 'filled', form_type: 'PLS', issuing_office: 'MAYOR', approving_name: 'MAYOR', destination: 'Provincial Capitol', date_filed: '2026-11-20' });
+  const [emps] = await pool.query('SELECT full_name FROM record_employees WHERE record_id = ?', [data.id]);
+  expect(emps).toEqual([{ full_name: 'Emp 1' }]);
+});
+
+test('fillBlank uses the US-5 detail rules', async () => {
+  const { data } = await blank();
+  expect((await fill(data.id, { destination: '', employeeIds: [], purpose: 'a'.repeat(361) })).errors).toEqual({
+    destination: 'Required', employees: 'Add at least one employee', purpose: 'At most 360 characters',
+  });
+});
+
+test('fillBlank twice, or on a missing record, is refused', async () => {
+  const { data } = await blank();
+  expect((await fill(data.id)).ok).toBe(true);
+  expect(await fill(data.id)).toEqual({ ok: false, error: 'This blank form is no longer available.' });
+  expect(await fill(99999)).toEqual({ ok: false, error: 'This blank form is no longer available.' });
+});
+
+test('blank records never count as overlaps; filling one can warn', async () => {
+  await blank();
+  expect((await create({ inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22' })).ok).toBe(true);
+  const { data } = await blank();
+  const res = await fill(data.id, { inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' });
+  expect(res.error).toBe('Overlapping records');
+  expect(res.overlaps.map((o) => o.number)).toEqual(['2026-11-2']);
+  const [[r]] = await pool.query('SELECT status FROM records WHERE id = ?', [data.id]);
+  expect(r.status).toBe('blank');
+  expect((await fillBlank(pool, { id: data.id, ...details({ inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21' }), confirmOverlap: true }, { userId: ids.userId })).ok).toBe(true);
+});
