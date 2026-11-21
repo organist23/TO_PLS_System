@@ -38,9 +38,13 @@ export default function Records({ params = {}, go }) {
   }, [query]);
   useEffect(() => void loadList(), [loadList]);
 
-  useEffect(() => {
-    window.api.invoke('offices:list', {}).then((res) => res.ok && setOffices(res.data));
+  const [officesError, setOfficesError] = useState('');
+  const loadOffices = useCallback(async () => {
+    const res = await window.api.invoke('offices:list', {});
+    setOfficesError(res.ok ? '' : res.error);
+    if (res.ok) setOffices(res.data);
   }, []);
+  useEffect(() => void loadOffices(), [loadOffices]);
 
   const openRecord = useCallback(async (id) => {
     setDetail({ status: 'loading', id });
@@ -195,6 +199,9 @@ export default function Records({ params = {}, go }) {
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-900">Records</h1>
       {notice && <Banner kind="success">{notice}</Banner>}
+      {officesError && (
+        <Banner action={<button className={btn.link} onClick={loadOffices}>Retry</button>}>{officesError}</Banner>
+      )}
 
       <div className="flex flex-wrap items-start gap-4">
         <div className="w-64">
