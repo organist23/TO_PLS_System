@@ -93,13 +93,25 @@ Conventions later phases inherit: every print path goes through `print(rec)` (pr
 
 ## Part two — Monitoring and data safety
 
-### Phase 4 — Out today and per-office reports NEXT
+### Phase 4 — Out today and per-office reports ✅ DONE (merged `0bf50d6`, 2026-11-21)
 
-Covers US-11, US-12.
+Covers US-11, US-12. User decisions 2026-11-21: the report range matches travel (inclusive) dates, like the Records filter; Out today is the page after login (US-1 "opens the dashboard").
 
 - Dashboard of employees out on a date, per-office report with .xlsx export.
 
-### Phase 5 — Backup and restore LATER
+**Done when:** in the packaged app, Out today lists every employee on an active filled record for the chosen date, filtered by office, and the per-office report shows rows and counts for a travel-date range and exports the same rows to .xlsx. Every US-11, US-12 and CW-2 condition passes. — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe: all US-11 and US-12 conditions, CW-2 (blank → fill → out today → edit → moves), archived and blank excluded, archived offices still filterable (102/102 full E2E, 143/143 unit). Results: `docs/test-results/PHASE-4-TEST-RESULTS.md`. Regression: full suite (App.jsx and `records:print` are shared by several phases), US-1 (landing now Out today), US-3 to US-10, US-15, CW-1 pass.
+
+Shipped as `src/main/reports.js`: `outOn`, `officeReport`, `reportFile`. `src/main/records.js`: `isDate` now exported. `src/main/ipc.js`: `saveExport` (now behind `records:print`), routes `reports:out`, `reports:office`, `reports:export`. `src/renderer/pages/OutToday.jsx`, `Reports.jsx`. `src/renderer/components/useOffices.js`: `useOffices`. `src/renderer/App.jsx` (Out today first and landing, Reports last). Tables: none.
+
+Deliberately not built, and why: export from Out today, because US-11 asks for none. Grouped office headings on Out today, because US-11 allows "groups or filters" and the filter covers it. Midnight rollover of a page left open, because a nav click reloads it.
+
+Picked up from Phase 3: active records = `archived_at IS NULL`, plus `status = 'filled'` for dates and people; record snapshots (`record_employees`) are the source of names and offices. Picked up from Phase 2: the `records:print` save path, now `saveExport`.
+
+Conventions later phases inherit: every .xlsx export goes through `saveExport` (save dialog, write, `exported` map), so `records:openExport` opens it. Reports read `record_employees` snapshots, with the office saved on the record, and office filters include archived offices (`useOffices`). Exported cells are plain text or numbers, never formulas. E2E dates relative to today come from `localDay(offset)` in `tests/e2e/helpers.js`; login lands on Out today.
+
+### Phase 5 — Backup and restore NEXT
+
+On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch.
 
 Covers US-13, US-14.
 
