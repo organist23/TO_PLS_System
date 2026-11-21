@@ -121,6 +121,7 @@ test.describe('US-5 Create a PLS or TO record', () => {
   test('missing required fields show messages and save nothing', async () => {
     await openNew();
     await page.getByLabel('Inclusive from').fill('');
+    await page.getByLabel('Recommending approval (Department Head who signed)').selectOption(''); // clear the pre-filled default
     await button('Save').click();
     await expect(page.locator('#rec-employees-error')).toHaveText('Add at least one employee');
     await expect(page.locator('#rec-destination-error')).toHaveText('Required');

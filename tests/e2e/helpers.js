@@ -123,8 +123,9 @@ export async function openReturnedBlank(page) {
   await page.getByRole('button', { name: 'Issue blank form', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Issue blank', exact: true }).click();
   const preview = page.getByRole('dialog', { name: /^Preview / });
-  const number = (await preview.getByRole('heading').first().textContent()).replace(/^Preview (PLS|TO) /, '').trim();
+  const [, formType, number] = (await preview.getByRole('heading').first().textContent()).trim().match(/^Preview (PLS|TO) (.+)$/);
   await preview.getByRole('button', { name: 'Close' }).click();
+  await page.locator('#enc-form').selectOption(formType); // the issued blank's own form type
   await page.getByLabel('Number on the returned form').fill(number);
   await page.getByRole('button', { name: 'Find', exact: true }).click();
   await page.getByRole('heading', { name: /^Fill in / }).waitFor();

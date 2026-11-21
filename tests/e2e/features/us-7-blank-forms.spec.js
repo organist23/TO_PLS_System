@@ -84,8 +84,10 @@ test.describe('US-7 Issue a numbered blank form', () => {
     await page.getByLabel('Destination').fill('Treasury');
     await page.getByLabel('Departure').fill('2026-11-21T09:00');
     await page.getByLabel('Purpose').fill('Errand');
-    // US-7 changed: the Department Head who signed is required and has no default.
-    await expect(page.getByLabel('Recommending approval (Department Head who signed)')).toHaveValue('');
+    // US-7 changed: the Department Head starts as the Mayor's Office default and is still required.
+    const head = page.getByLabel('Recommending approval (Department Head who signed)');
+    await expect(head.locator('option:checked')).toHaveText('JUAN P. SANTOS — DEPARTMENT HEAD');
+    await head.selectOption('');
     await button('Save').click();
     await expect(page.locator('#rec-recommendingId-error')).toHaveText('Choose an active recommending signatory');
     await page.getByLabel('Recommending approval (Department Head who signed)').selectOption({ label: 'JUAN P. SANTOS — DEPARTMENT HEAD' });

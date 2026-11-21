@@ -46,7 +46,8 @@ test('CW-1 issue and print a record', async () => {
     await nav('Forms'); // US-16: the default approver from US-4 arrives in Print blank forms
     await expect(blankFormsSection(page).getByLabel('Approved by').locator('option:checked')).toHaveText('VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR');
     expect(await openReturnedBlank(page)).toBe(`${thisMonth()}-1`); // US-17: the returned paper, by its number
-    await pickDepartmentHead(page); // the US-4 Department Head who signed
+    // the US-4 Mayor's Office Department Head default arrives pre-filled
+    await expect(page.getByLabel('Recommending approval (Department Head who signed)').locator('option:checked')).toHaveText('JUAN P. SANTOS — DEPARTMENT HEAD');
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Ana Cruz — Municipal Health Office' });
     await button('Add').click();
     await page.getByLabel('Destination').fill('Provincial Capitol');
