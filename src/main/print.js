@@ -100,8 +100,11 @@ export async function fillWorkbook(record) {
     ws.mergeCells(`A${row}:K${row}`);
     restyle(c, { font: { ...cell(key === 'recName' ? 'apprName' : 'apprTitle').font }, alignment: { horizontal: 'center', vertical: 'middle' } });
   }
-  cell('recName').value = record.recommending_name;
-  cell('recTitle').value = record.recommending_title;
+  // A Mayor's Office blank has no Department Head yet: the template keeps the official paper's empty space.
+  if (record.recommending_name != null) {
+    cell('recName').value = record.recommending_name;
+    cell('recTitle').value = record.recommending_title;
+  }
   cell('apprName').value = record.approving_name;
   cell('apprTitle').value = record.approving_title;
 
@@ -135,9 +138,24 @@ export async function fillWorkbook(record) {
   return wb;
 }
 
-export async function buildWorkbook(record) {
-  return Buffer.from(await (await fillWorkbook(record)).xlsx.writeBuffer());
+// One sheet per record, each a copy of its filled template. Every sheet is selected, so Excel opens them grouped
+// and a plain Print prints every form.
+export async function buildStackWorkbook(records) {
+  const wb = await fillWorkbook(records[0]);
+  wb.worksheets[0].name = records[0].number;
+  for (const record of records.slice(1)) {
+    const src = (await fillWorkbook(record)).worksheets[0];
+    const ws = wb.addWorksheet(record.number);
+    ws.model = { ...src.model, name: record.number, id: ws.id };
+    for (const range of src.model.merges) ws.mergeCells(range); // the model setter drops merges
+  }
+  for (const ws of wb.worksheets) ws.views = [{ ...ws.views[0], tabSelected: true }];
+  // The template came from a 30-sheet workbook; its saved active tab would make Excel select one sheet only.
+  wb.views = [{ ...wb.views[0], firstSheet: 0, activeTab: 0 }];
+  return Buffer.from(await wb.xlsx.writeBuffer());
 }
+
+export const buildWorkbook = (record) => buildStackWorkbook([record]);
 
 // ---------- preview: the filled sheet as plain data the renderer draws with React (never as HTML) ----------
 
