@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const ExcelJS = createRequire(import.meta.url)('exceljs'); // Playwright's ESM loader cannot import exceljs directly
-import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, saveFromPreview, blankFormsSection, recordForm } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, saveFromPreview, blankFormsSection, recordForm, openReturnedBlank, pickDepartmentHead } from '../helpers.js';
 
 test.describe('US-7 Issue a numbered blank form', () => {
   let app, page, pool, file;
@@ -15,8 +15,8 @@ test.describe('US-7 Issue a numbered blank form', () => {
     await seedDirectory(page);
     await mockSaveDialog(app, file);
     await mockOpenPath(app);
-    await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
-    await page.getByRole('heading', { name: 'New record' }).waitFor();
+    await page.getByRole('navigation').getByRole('button', { name: 'Forms' }).click();
+    await page.getByRole('heading', { name: 'Forms', exact: true }).waitFor();
   });
   test.afterEach(async () => {
     await app.close();
@@ -84,8 +84,10 @@ test.describe('US-7 Issue a numbered blank form', () => {
     await page.getByLabel('Destination').fill('Treasury');
     await page.getByLabel('Departure').fill('2026-11-21T09:00');
     await page.getByLabel('Purpose').fill('Errand');
-    // US-7 changed: the Department Head who signed is required and has no default.
-    await expect(page.getByLabel('Recommending approval (Department Head who signed)')).toHaveValue('');
+    // US-7 changed: the Department Head starts as the Mayor's Office default and is still required.
+    const head = page.getByLabel('Recommending approval (Department Head who signed)');
+    await expect(head.locator('option:checked')).toHaveText('JUAN P. SANTOS — DEPARTMENT HEAD');
+    await head.selectOption('');
     await button('Save').click();
     await expect(page.locator('#rec-recommendingId-error')).toHaveText('Choose an active recommending signatory');
     await page.getByLabel('Recommending approval (Department Head who signed)').selectOption({ label: 'JUAN P. SANTOS — DEPARTMENT HEAD' });
@@ -98,11 +100,13 @@ test.describe('US-7 Issue a numbered blank form', () => {
 
   test('Print again shows no banner about another record and prints the blank', async () => {
     await issue(); // blank <ym>-1
+    expect(await openReturnedBlank(page)).toBe(`${thisMonth()}-2`); // another record, encoded from its own blank (paper first)
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Ana Cruz — MHO' });
     await button('Add').click();
     await page.getByLabel('Destination').fill('Capitol');
     await page.getByLabel('Departure').fill('2026-11-21T08:00');
     await page.getByLabel('Purpose').fill('Meeting');
+    await pickDepartmentHead(page);
     await button('Save').click();
     await expect(page.getByRole('status')).toHaveText(`Saved PLS ${thisMonth()}-2`);
 
@@ -116,6 +120,8 @@ test.describe('US-7 Issue a numbered blank form', () => {
   });
 
   test('filling in applies the overlap warning', async () => {
+    expect(await openReturnedBlank(page)).toBe(`${thisMonth()}-1`); // the earlier record, paper first
+    await pickDepartmentHead(page);
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Ana Cruz — MHO' });
     await button('Add').click();
     await page.getByLabel('Destination').fill('Capitol');

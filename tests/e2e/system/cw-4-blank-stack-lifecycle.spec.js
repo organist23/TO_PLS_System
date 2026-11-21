@@ -11,7 +11,7 @@ test('CW-4 blank stack lifecycle', async () => {
     const nav = (name) => page.getByRole('navigation').getByRole('button', { name }).click();
     const button = (name) => page.getByRole('button', { name, exact: true });
 
-    await nav('New record'); // US-16: a stack of 3 on the desk
+    await nav('Forms'); // US-16: a stack of 3 on the desk
     await page.getByLabel('How many').fill('3');
     await button('Issue blank form').click();
     await button('Issue 3 blanks').click();
@@ -44,7 +44,7 @@ test('CW-4 blank stack lifecycle', async () => {
     const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     await pool.query("UPDATE records SET period = ?, number = CONCAT(?, '-', seq + 100), seq = seq + 100 WHERE status = 'blank'", [period, period]);
 
-    await nav('New record'); // US-18: the unused papers are deleted, the encoded one stays
+    await nav('Forms'); // US-18: the unused papers are deleted, the encoded one stays
     await page.getByRole('button', { name: /^Delete 2 unused blanks of / }).click();
     await page.getByRole('dialog').getByRole('button', { name: 'Delete', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText(/^Deleted 2 unused blanks of /);

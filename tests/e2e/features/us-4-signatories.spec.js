@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { launchApp, loginAsChangedAdmin, seedDirectory, invoke } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, invoke, seedRecord } from '../helpers.js';
 
 test.describe('US-4 Manage signatories', () => {
   let app, page, pool;
@@ -98,7 +98,7 @@ test.describe('US-4 Manage signatories', () => {
     await page.getByRole('dialog').getByRole('button', { name: 'Archive' }).click();
     await expect(row('ARNEL A. HERRERA')).toHaveCount(0);
 
-    await nav('New record');
+    await nav('Forms');
     const options = await page.getByLabel('Approved by').locator('option').allTextContents();
     expect(options.some((o) => o.includes('ARNEL'))).toBe(false);
 
@@ -110,11 +110,10 @@ test.describe('US-4 Manage signatories', () => {
   });
 
   test('a saved record keeps the signatory name and title after the signatory is edited', async () => {
-    const { employees, signatories } = await seedDirectory(page);
-    await invoke(page, 'records:create', {
-      formType: 'PLS', issuingOffice: 'MAYOR', dateFiled: '2026-11-21', employeeIds: [employees['Ana Cruz']],
-      destination: 'Capitol', inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21', departureAt: '2026-11-21T08:00',
-      purpose: 'Reports', recommendingId: signatories.deptHead, approvingId: signatories.mayor,
+    const seed = await seedDirectory(page);
+    await seedRecord(page, seed, { // paper first: an issued blank, encoded
+      dateFiled: '2026-11-21', employeeIds: [seed.employees['Ana Cruz']], destination: 'Capitol',
+      inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21', departureAt: '2026-11-21T08:00', purpose: 'Reports',
     });
     await nav('Signatories');
     await row('VINCENT E. HERMOSO').getByRole('button', { name: 'Edit' }).click();

@@ -133,6 +133,7 @@ Changed 2026-11-21: date and time formats, Mayor's TO prints the recommending si
 - [ ] A failed save (e.g. file open in Excel) shows an error and does not change the record.
 
 ### US-7: Issue a numbered blank form
+Changed 2026-11-21: when filling a Mayor's Office blank, the Department Head starts as the Mayor's Office recommending default (US-4) and staff change it to the head who signed (user decision during Phase 9 review).
 Changed 2026-11-21: a Mayor's Office blank leaves the Department Head line empty; it is picked when filling in (user decision before Phase 8, blanks are taken at random by any department).
 Changed 2026-11-21: after issuing, the preview (US-15) opens before the save dialog (user request after Phase 2).
 Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories fixed when filling (user decisions before Phase 2 plan).
@@ -149,7 +150,7 @@ Changed 2026-11-21: confirmation before issuing, blank-forms list, signatories f
 - [ ] Filling in uses the same rules as US-5 (required fields, 1 to 5 employees, purpose limit, overlap warning).
 
 **Rejects when:**
-- [ ] When filling in, form type, issuing office, number, and the printed signatories cannot be changed. A Mayor's Office blank requires choosing the active Department Head who signed (recommending role); Approved by stays as printed.
+- [ ] When filling in, form type, issuing office, number, and the printed signatories cannot be changed. A Mayor's Office blank requires the active Department Head who signed (recommending role), pre-filled with the Mayor's Office recommending default and changeable; Approved by stays as printed.
 - [ ] A Blank issued record does not appear in "who is out today" or office reports until it is filled.
 
 ### US-8: Edit a record

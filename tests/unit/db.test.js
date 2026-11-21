@@ -4,7 +4,7 @@ import { migrate } from '../../src/main/db.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee } from '../../src/main/directory.js';
 import { createSignatory } from '../../src/main/signatories.js';
-import { createRecord } from '../../src/main/records.js';
+import { issueBlank, fillBlank } from '../../src/main/records.js';
 
 let pool;
 afterAll(() => pool?.end());
@@ -35,11 +35,11 @@ test('a v1 database with a record migrates intact', async () => {
     const rec = (await createSignatory(p, { name: 'R', title: 'T', role: 'recommending' })).data.id;
     const appr = (await createSignatory(p, { name: 'A', title: 'T', role: 'approving' })).data.id;
     const [[{ id: userId }]] = await p.query('SELECT id FROM users');
-    await createRecord(p, {
-      formType: 'TO', issuingOffice: 'SB', dateFiled: '2026-11-20', employeeIds: [emp], destination: 'Capitol', vehicle: '',
+    const { id } = (await issueBlank(p, { formType: 'TO', issuingOffice: 'SB', recommendingId: rec, approvingId: appr }, { userId, now: new Date(2026, 10, 20) })).data;
+    await fillBlank(p, {
+      id, dateFiled: '2026-11-20', employeeIds: [emp], destination: 'Capitol', vehicle: '',
       inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-21', departureAt: '2026-11-20T08:00', returnAt: '', purpose: 'Meeting',
-      recommendingId: rec, approvingId: appr,
-    }, { userId, now: new Date(2026, 10, 20) });
+    }, { userId });
     // Put the database back into its Phase 1 (v1) shape.
     await p.query(`ALTER TABLE records DROP COLUMN status, MODIFY date_filed DATE NOT NULL, MODIFY inclusive_from DATE NOT NULL,
       MODIFY inclusive_to DATE NOT NULL, MODIFY departure_at DATETIME NOT NULL, MODIFY recommending_id INT NOT NULL,

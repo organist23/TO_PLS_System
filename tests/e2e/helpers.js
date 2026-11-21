@@ -83,14 +83,18 @@ export async function saveFromPreview(page) {
   await preview.getByRole('button', { name: 'Save as Excel' }).click();
 }
 
-// A filled record through the real records:create handler (setup, not the UI under test). seed = seedDirectory's result.
-export const seedRecord = (page, seed, over = {}) =>
-  invoke(page, 'records:create', {
+// A filled record the real way (setup, not the UI under test): issue a blank, then fill it in (US-5 changed: paper first).
+// seed = seedDirectory's result. Returns { id, number, formType } like the old direct create.
+export async function seedRecord(page, seed, over = {}) {
+  const v = {
     formType: 'PLS', issuingOffice: 'MAYOR', dateFiled: '2026-11-20', employeeIds: [Object.values(seed.employees)[0]],
     destination: 'Provincial Capitol', vehicle: '', inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-20',
     departureAt: '2026-11-20T08:00', returnAt: '', purpose: 'Submit reports',
     recommendingId: seed.signatories.deptHead, approvingId: seed.signatories.mayor, ...over,
-  }).then((r) => r.data);
+  };
+  const issued = await invoke(page, 'records:issueBlank', { formType: v.formType, issuingOffice: v.issuingOffice, recommendingId: v.recommendingId, approvingId: v.approvingId });
+  return (await invoke(page, 'records:fillBlank', { ...v, id: issued.data.ids[0] })).data;
+}
 
 // Records page: the Number column of the list, in order (retries until it matches).
 export const listNumbers = (page) => page.locator('table tbody tr td:first-child');
@@ -106,7 +110,27 @@ export const localDay = (offset = 0) => {
 export const tableRows = (table) =>
   table.locator('tbody tr').evaluateAll((trs) => trs.map((tr) => [...tr.cells].map((c) => c.textContent).join(' | ')));
 
-// New record: the "Print blank forms" section, which has its own form, office and signatory choices.
+// Forms page: the "Print blank forms" section, which has its own form, office and signatory choices.
 export const blankFormsSection = (page) => page.getByRole('region', { name: 'Print blank forms' });
-// New record: the record form itself (Save), as opposed to the Print blank forms section.
+// Forms page: the record form (Fill in or Edit), as opposed to the Print blank forms section.
 export const recordForm = (page) => page.locator('#record-form');
+
+// Paper first through the UI: issues one blank in Print blank forms, closes its preview, and opens it through
+// Encode a returned form. Leaves the Fill in form open; returns the number. A Mayor's Office blank needs the
+// Department Head who signed, chosen with pickDepartmentHead().
+export async function openReturnedBlank(page) {
+  await page.getByLabel('How many').fill('1');
+  await page.getByRole('button', { name: 'Issue blank form', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Issue blank', exact: true }).click();
+  const preview = page.getByRole('dialog', { name: /^Preview / });
+  const [, formType, number] = (await preview.getByRole('heading').first().textContent()).trim().match(/^Preview (PLS|TO) (.+)$/);
+  await preview.getByRole('button', { name: 'Close' }).click();
+  await page.locator('#enc-form').selectOption(formType); // the issued blank's own form type
+  await page.getByLabel('Number on the returned form').fill(number);
+  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  await page.getByRole('heading', { name: /^Fill in / }).waitFor();
+  return number;
+}
+
+export const pickDepartmentHead = (page, label = 'JUAN P. SANTOS — DEPARTMENT HEAD') =>
+  page.getByLabel('Recommending approval (Department Head who signed)').selectOption({ label });

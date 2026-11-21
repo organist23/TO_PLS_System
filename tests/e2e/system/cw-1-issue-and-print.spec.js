@@ -3,11 +3,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { launchApp, loginAsChangedAdmin, thisMonth, mockSaveDialog, saveFromPreview } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, thisMonth, mockSaveDialog, saveFromPreview, openReturnedBlank, pickDepartmentHead, blankFormsSection } from '../helpers.js';
 
 const ExcelJS = createRequire(import.meta.url)('exceljs');
 
-// CW-1: US-1 → US-3 → US-4 → US-5 → US-6. Asserts the hand-offs between stories, not each story's edge cases.
+// CW-1: US-1 → US-3 → US-4 → US-16 → US-17 → US-6 (changed 2026-11-21: paper first). Asserts the hand-offs between stories, not each story's edge cases.
 test('CW-1 issue and print a record', async () => {
   const { app, page, pool } = await launchApp();
   const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'plsto-cw1-')), 'cw1.xlsx');
@@ -43,8 +43,11 @@ test('CW-1 issue and print a record', async () => {
     await page.getByLabel("Mayor's Office — approving").selectOption({ label: 'VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR' });
     await expect(page.getByLabel("Mayor's Office — approving")).toBeEnabled();
 
-    await nav('New record'); // US-5: the employee from US-3 and the defaults from US-4 arrive here
-    await expect(page.getByLabel('Recommending approval').locator('option:checked')).toHaveText('JUAN P. SANTOS — DEPARTMENT HEAD');
+    await nav('Forms'); // US-16: the default approver from US-4 arrives in Print blank forms
+    await expect(blankFormsSection(page).getByLabel('Approved by').locator('option:checked')).toHaveText('VINCENT E. HERMOSO — OIC - MUNICIPAL MAYOR');
+    expect(await openReturnedBlank(page)).toBe(`${thisMonth()}-1`); // US-17: the returned paper, by its number
+    // the US-4 Mayor's Office Department Head default arrives pre-filled
+    await expect(page.getByLabel('Recommending approval (Department Head who signed)').locator('option:checked')).toHaveText('JUAN P. SANTOS — DEPARTMENT HEAD');
     await page.getByLabel('Employee', { exact: true }).selectOption({ label: 'Ana Cruz — Municipal Health Office' });
     await button('Add').click();
     await page.getByLabel('Destination').fill('Provincial Capitol');

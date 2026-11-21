@@ -34,7 +34,7 @@ function RadioGroup({ legend, name, value, options, onChange, disabled = false }
   );
 }
 
-// params: {} for a new record, { mode: 'edit' | 'fill', id } when opened from Records.
+// Forms page (paper first, US-5): print blanks, encode returned ones. params: {} or { mode: 'edit' | 'fill', id } from Records.
 export default function NewRecord({ params = {}, go }) {
   const [lists, setLists] = useState({ status: 'loading' });
   const [form, setForm] = useState({ formType: 'PLS', issuingOffice: 'MAYOR', recommendingId: '', approvingId: '', ...blankDetails() });
@@ -100,7 +100,9 @@ export default function NewRecord({ params = {}, go }) {
           recommendingName: r.recommending_name, recommendingTitle: r.recommending_title,
           approvingName: r.approving_name, approvingTitle: r.approving_title,
         });
-        setForm((f) => ({ ...f, ...blankDetails(), formType: r.form_type, issuingOffice: r.issuing_office, recommendingId: '' }));
+        // A Mayor's Office blank's Department Head starts as the office default; staff change it to the head who signed.
+        const head = r.recommending_id === null ? defs.data.MAYOR.recommending ?? '' : '';
+        setForm((f) => ({ ...f, ...blankDetails(), formType: r.form_type, issuingOffice: r.issuing_office, recommendingId: String(head) }));
       } else {
         setGone(!rec.ok ? rec.error : params.mode === 'fill' ? 'This blank form is no longer available.' : 'This record can no longer be edited.');
       }
@@ -114,14 +116,6 @@ export default function NewRecord({ params = {}, go }) {
     const d = lists.defaults[stack.issuingOffice];
     setStack((s) => ({ ...s, recommendingId: d.recommending ?? '', approvingId: d.approving ?? '' }));
   }, [lists, stack.issuingOffice]);
-
-  // Signatories follow the issuing office's defaults whenever the office changes or the lists (re)load.
-  // An edit keeps the record's signatories; a blank being filled has its own (and no default Department Head).
-  useEffect(() => {
-    if (lists.status !== 'ready' || params.mode === 'edit' || filling) return;
-    const d = lists.defaults[form.issuingOffice];
-    setForm((f) => ({ ...f, recommendingId: d.recommending ?? '', approvingId: d.approving ?? '' }));
-  }, [lists, form.issuingOffice, filling]);
 
   if (lists.status === 'loading') return <p className="text-sm text-slate-600">Loading…</p>;
   if (lists.status === 'error') {
@@ -163,11 +157,10 @@ export default function NewRecord({ params = {}, go }) {
     setSaved(null);
     resetPrinting();
     const withSigners = { ...form, recommendingId: Number(form.recommendingId) || null, approvingId: Number(form.approvingId) || null, confirmOverlap };
+    // The record form exists only for Fill in and Edit (paper first).
     const res = filling
       ? await window.api.invoke('records:fillBlank', { ...withSigners, id: filling.id })
-      : editing
-        ? await window.api.invoke('records:update', { ...withSigners, id: editing.id })
-        : await window.api.invoke('records:create', withSigners);
+      : await window.api.invoke('records:update', { ...withSigners, id: editing?.id });
     busy.current = false;
     setSaving(false);
     if (res.overlaps) return setOverlaps(res.overlaps);
@@ -253,7 +246,8 @@ export default function NewRecord({ params = {}, go }) {
   function startFill(b) {
     setFilling(b);
     resetPrinting();
-    setForm((f) => ({ ...f, ...blankDetails(), formType: b.formType, issuingOffice: b.issuingOffice, recommendingId: '' }));
+    const head = b.recommendingName == null ? lists.defaults.MAYOR.recommending ?? '' : '';
+    setForm((f) => ({ ...f, ...blankDetails(), formType: b.formType, issuingOffice: b.issuingOffice, recommendingId: String(head) }));
     setErrors({});
     setFormError('');
     setNotice('');
@@ -303,7 +297,7 @@ export default function NewRecord({ params = {}, go }) {
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-900">
-        {filling ? `Fill in ${filling.formType} ${filling.number}` : editing ? `Edit ${editing.form_type} ${editing.number}` : 'New record'}
+        {filling ? `Fill in ${filling.formType} ${filling.number}` : editing ? `Edit ${editing.form_type} ${editing.number}` : 'Forms'}
       </h1>
       {notice && <Banner kind="success">{notice}</Banner>}
       {saved && (
@@ -322,6 +316,8 @@ export default function NewRecord({ params = {}, go }) {
       {printing.error && <Banner>{printing.error}</Banner>}
       {formError && <Banner>{formError}</Banner>}
 
+      {/* Paper first (US-5): the record form is only for encoding a returned blank or editing a record. */}
+      {(filling || editing) && (
       <form id="record-form" onSubmit={(e) => { e.preventDefault(); submit(); }} className="space-y-8 rounded-md border border-slate-200 bg-white p-6">
         <div className="grid gap-6 sm:grid-cols-3">
           <RadioGroup legend="Form" name="formType" value={form.formType} options={[['PLS', 'PLS'], ['TO', 'TO']]} disabled={!!filling || !!editing}
@@ -380,6 +376,9 @@ export default function NewRecord({ params = {}, go }) {
             {filling.recommendingName == null ? (
               <Field label="Recommending approval (Department Head who signed)" id="rec-recommendingId" error={errors.recommendingId}>
                 <select {...field('recommendingId')}><option value="">Choose the Department Head</option>{signatoryOptions('recommending')}</select>
+                {signatoryOptions('recommending').length === 0 && (
+                  <p className="mt-1 text-sm text-slate-600">No active recommending signatories. Add them on Signatories.</p>
+                )}
               </Field>
             ) : (
               <div><p className="font-medium text-slate-700">Recommending approval (as printed)</p>
@@ -412,6 +411,7 @@ export default function NewRecord({ params = {}, go }) {
           ) : null}
         </div>
       </form>
+      )}
 
       {!editing && !params.mode && !filling && (
       <section aria-labelledby="stack-heading" className="space-y-6 rounded-md border border-slate-200 bg-white p-6">

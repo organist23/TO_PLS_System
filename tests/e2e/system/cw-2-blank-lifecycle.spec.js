@@ -12,7 +12,7 @@ test('CW-2 blank form lifecycle', async () => {
     const button = (name) => page.getByRole('button', { name, exact: true });
     const outRows = () => tableRows(page.getByRole('table'));
 
-    await nav('New record'); // US-7: issue a numbered blank
+    await nav('Forms'); // US-7: issue a numbered blank
     await button('Issue blank form').click();
     await page.getByRole('dialog', { name: /^Issue a blank PLS/ }).getByRole('button', { name: 'Issue blank' }).click();
     const preview = page.getByRole('dialog', { name: `Preview PLS ${m}-1` });

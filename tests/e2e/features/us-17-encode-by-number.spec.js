@@ -11,8 +11,8 @@ test.describe('US-17 Encode a returned form by its number', () => {
     const issue = async (formType, count) => (await invoke(page, 'records:issueBlank', { formType, issuingOffice: 'MAYOR', approvingId: seed.signatories.mayor, count })).data;
     pls = await issue('PLS', 3); // PLS <m>-1..3
     to = await issue('TO', 1); // TO <m>-1
-    await page.getByRole('navigation').getByRole('button', { name: 'New record' }).click();
-    await page.getByRole('heading', { name: 'New record' }).waitFor();
+    await page.getByRole('navigation').getByRole('button', { name: 'Forms' }).click();
+    await page.getByRole('heading', { name: 'Forms', exact: true }).waitFor();
   });
   test.afterEach(async () => {
     await app.close();
@@ -56,7 +56,7 @@ test.describe('US-17 Encode a returned form by its number', () => {
   test('an unknown number is refused with a message', async () => {
     await find('PLS', `${m}-99`);
     await expect(page.locator('#enc-number-error')).toHaveText('No blank form has this number. Check the number on the paper.');
-    await expect(heading()).toHaveText('New record');
+    await expect(heading()).toHaveText('Forms');
   });
 
   test('an encoded number says so and links to the record', async () => {

@@ -3,7 +3,7 @@ import { freshTestDb } from '../helpers/testDb.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee, archiveOffice } from '../../src/main/directory.js';
 import { createSignatory } from '../../src/main/signatories.js';
-import { createRecord, issueBlank, archiveRecord } from '../../src/main/records.js';
+import { issueBlank, issueBlanks, fillBlank, archiveRecord } from '../../src/main/records.js';
 import { outOn, officeReport, reportFile } from '../../src/main/reports.js';
 import { createRequire } from 'node:module';
 const ExcelJS = createRequire(import.meta.url)('exceljs');
@@ -26,11 +26,16 @@ beforeEach(async () => {
   const rec = (await createSignatory(pool, { name: 'HEAD', title: 'DEPARTMENT HEAD', role: 'recommending' })).data.id;
   const appr = (await createSignatory(pool, { name: 'MAYOR', title: 'MUNICIPAL MAYOR', role: 'approving' })).data.id;
   const [[{ id: userId }]] = await pool.query('SELECT id FROM users');
-  const create = async (over) => (await createRecord(pool, {
-    formType: 'PLS', issuingOffice: 'MAYOR', dateFiled: '2026-11-19', destination: 'Capitol', vehicle: '',
-    inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21', departureAt: '2026-11-21T08:00', returnAt: '', purpose: 'Meeting',
-    recommendingId: rec, approvingId: appr, confirmOverlap: true, ...over,
-  }, { userId, now: NOV })).data;
+  // Paper first: issue a blank, then encode it.
+  const create = async (over) => {
+    const v = {
+      formType: 'PLS', issuingOffice: 'MAYOR', dateFiled: '2026-11-19', destination: 'Capitol', vehicle: '',
+      inclusiveFrom: '2026-11-21', inclusiveTo: '2026-11-21', departureAt: '2026-11-21T08:00', returnAt: '', purpose: 'Meeting',
+      recommendingId: rec, approvingId: appr, confirmOverlap: true, ...over,
+    };
+    const [id] = (await issueBlanks(pool, { ...v, count: 1 }, { userId, now: NOV })).data.ids;
+    return (await fillBlank(pool, { ...v, id }, { userId })).data;
+  };
   const a = await create({ employeeIds: [ana, carla], inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22', returnAt: '2026-11-22T17:00', destination: 'Provincial Capitol' });
   const b = await create({ formType: 'TO', employeeIds: [ben], destination: 'Manila' });
   const c = (await issueBlank(pool, { formType: 'PLS', issuingOffice: 'MAYOR', recommendingId: rec, approvingId: appr }, { userId, now: NOV })).data;
