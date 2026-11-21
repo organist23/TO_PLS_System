@@ -211,14 +211,49 @@ export async function nextNumbers(pool, { formType, issuingOffice, count = 1 }, 
   return { ok: true, data: { first: formatNumber(issuingOffice, period, next), last: formatNumber(issuingOffice, period, next + n - 1) } };
 }
 
+const BLANK_COLUMNS = `id, number, form_type AS formType, issuing_office AS issuingOffice,
+  recommending_name AS recommendingName, recommending_title AS recommendingTitle,
+  approving_name AS approvingName, approving_title AS approvingTitle, created_at AS createdAt`;
+
 export async function listBlank(pool) {
   const [rows] = await pool.query(
-    `SELECT id, number, form_type AS formType, issuing_office AS issuingOffice,
-            recommending_name AS recommendingName, recommending_title AS recommendingTitle,
-            approving_name AS approvingName, approving_title AS approvingTitle, created_at AS createdAt
-       FROM records WHERE status = 'blank' AND archived_at IS NULL ORDER BY id DESC`,
+    `SELECT ${BLANK_COLUMNS} FROM records WHERE status = 'blank' AND archived_at IS NULL ORDER BY id DESC`,
   );
   return { ok: true, data: rows };
+}
+
+const NOT_FOUND = { ok: false, error: 'No blank form has this number. Check the number on the paper.' };
+
+// US-17: the number printed on a returned form. PLS and TO keep separate counters, so the form type is part of the key.
+export async function findBlank(pool, { formType, number } = {}) {
+  const key = String(number ?? '').replace(/\s+/g, '').toUpperCase();
+  if (!FORM_TYPES.includes(formType) || !key) return NOT_FOUND;
+  const [[row]] = await pool.query(
+    `SELECT ${BLANK_COLUMNS}, status, archived_at IS NOT NULL AS archived
+       FROM records WHERE form_type = ? AND REPLACE(UPPER(number), ' ', '') = ?`,
+    [formType, key],
+  );
+  return row ? { ok: true, data: { ...row, archived: row.archived === 1 } } : NOT_FOUND;
+}
+
+// US-18: past months that still hold unused blanks (active or voided).
+export async function unusedBlankMonths(pool, { now = new Date() } = {}) {
+  const [rows] = await pool.query(
+    `SELECT period, COUNT(*) AS count FROM records WHERE status = 'blank' AND period < ?
+      GROUP BY period ORDER BY period DESC`,
+    [periodOf(now)],
+  );
+  return { ok: true, data: rows };
+}
+
+// Permanent delete, the one exception to archive-only. Past months only: new numbers always use the current month,
+// so a deleted number can never be issued again.
+export async function deleteUnusedBlanks(pool, { period } = {}, { now = new Date() } = {}) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period ?? '') || period >= periodOf(now)) {
+    return { ok: false, error: 'Only blanks of a past month can be deleted.' };
+  }
+  const [r] = await pool.query("DELETE FROM records WHERE status = 'blank' AND period = ?", [period]);
+  return { ok: true, data: { period, deleted: r.affectedRows } };
 }
 
 const GONE = { ok: false, error: 'This blank form is no longer available.' };

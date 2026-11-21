@@ -3,7 +3,7 @@ import { freshTestDb, testConfig } from '../helpers/testDb.js';
 import { ensureAdmin } from '../../src/main/auth.js';
 import { createOffice, createEmployee, archiveEmployee, updateEmployee } from '../../src/main/directory.js';
 import { createSignatory, archiveSignatory, updateSignatory } from '../../src/main/signatories.js';
-import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord, issueBlanks, nextNumbers } from '../../src/main/records.js';
+import { createRecord, formatNumber, periodOf, issueBlank, listBlank, fillBlank, listRecords, getRecord, updateRecord, archiveRecord, restoreRecord, issueBlanks, nextNumbers, findBlank, unusedBlankMonths, deleteUnusedBlanks } from '../../src/main/records.js';
 
 let pool, ids;
 const NOV = new Date(2026, 10, 20, 9, 0);
@@ -535,4 +535,66 @@ test('filling an SB blank ignores a different recommending signatory', async () 
   const [id] = (await stack({ issuingOffice: 'SB', recommendingId: sec, count: 1 })).data.ids;
   expect((await fill(id)).ok).toBe(true);
   expect(await row(id)).toMatchObject({ recommending_id: sec, recommending_name: 'SB SEC' });
+});
+
+const OCT = new Date(2026, 9, 15, 9, 0);
+const find = (formType, number) => findBlank(pool, { formType, number });
+const NOT_FOUND = { ok: false, error: 'No blank form has this number. Check the number on the paper.' };
+
+test('findBlank matches form type and number; spaces and case do not matter', async () => {
+  const pls = (await stack({ count: 1 })).data.ids[0]; // PLS 2026-11-1
+  const to = (await stack({ formType: 'TO', count: 1 })).data.ids[0]; // TO 2026-11-1
+  expect((await find('PLS', '2026-11-1')).data).toMatchObject({ id: pls, number: '2026-11-1', formType: 'PLS', issuingOffice: 'MAYOR', status: 'blank', archived: false, recommendingName: null });
+  expect((await find('TO', ' 2026 - 11 - 1 ')).data.id).toBe(to);
+  const sec = (await createSignatory(pool, { name: 'SB SEC', title: 'SB SECRETARY', role: 'recommending' })).data.id;
+  const sb = (await stack({ issuingOffice: 'SB', recommendingId: sec, count: 1 })).data.ids[0];
+  expect((await find('PLS', 'sb2026-11-1')).data.id).toBe(sb);
+  expect(await find('PLS', '2026-11-9')).toEqual(NOT_FOUND);
+  expect(await find('PLS', '')).toEqual(NOT_FOUND);
+  expect(await find('XX', '2026-11-1')).toEqual(NOT_FOUND);
+});
+
+test('findBlank reports filled and voided numbers', async () => {
+  const [a, b] = (await stack({ count: 2 })).data.ids;
+  await fill(a);
+  await archiveRecord(pool, { id: b });
+  expect((await find('PLS', '2026-11-1')).data).toMatchObject({ id: a, status: 'filled', archived: false });
+  expect((await find('PLS', '2026-11-2')).data).toMatchObject({ id: b, status: 'blank', archived: true });
+});
+
+test('unusedBlankMonths lists past months with unused blanks, newest first', async () => {
+  await stack({ count: 2 }, new Date(2026, 8, 3)); // September
+  const [, oct2] = (await stack({ count: 3 }, OCT)).data.ids;
+  await archiveRecord(pool, { id: oct2 });
+  const [oct3] = (await stack({ count: 1 }, OCT)).data.ids;
+  await fill(oct3); // used, not counted
+  await stack({ count: 1 }); // November = current month, not listed
+  expect(await unusedBlankMonths(pool, { now: NOV })).toEqual({ ok: true, data: [{ period: '2026-10', count: 3 }, { period: '2026-09', count: 2 }] });
+});
+
+test('deleteUnusedBlanks removes only unused blanks of a past month', async () => {
+  const oct = (await stack({ count: 3 }, OCT)).data.ids;
+  await archiveRecord(pool, { id: oct[1] });
+  await fill(oct[2]);
+  const filledOct = (await create({ confirmOverlap: true }, OCT)).data.id;
+  const nov = (await stack({ count: 1 })).data.ids[0];
+  expect(await deleteUnusedBlanks(pool, { period: '2026-10' }, { now: NOV })).toEqual({ ok: true, data: { period: '2026-10', deleted: 2 } });
+  const [left] = await pool.query('SELECT id FROM records ORDER BY id');
+  expect(left.map((r) => r.id)).toEqual([oct[2], filledOct, nov]);
+});
+
+test('deleteUnusedBlanks refuses the current month, future and malformed periods', async () => {
+  const [nov] = (await stack({ count: 1 })).data.ids;
+  const refused = { ok: false, error: 'Only blanks of a past month can be deleted.' };
+  for (const period of ['2026-11', '2026-12', '2026-13', 'x', '', undefined]) {
+    expect(await deleteUnusedBlanks(pool, { period }, { now: NOV })).toEqual(refused);
+  }
+  expect(await row(nov)).toMatchObject({ status: 'blank' });
+});
+
+test('after deleting a past month, the current month keeps counting from its own highest number', async () => {
+  await stack({ count: 2 }, OCT);
+  await stack({ count: 2 });
+  await deleteUnusedBlanks(pool, { period: '2026-10' }, { now: NOV });
+  expect(await numberOf({})).toBe('2026-11-3');
 });
