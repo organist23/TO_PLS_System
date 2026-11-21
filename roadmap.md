@@ -54,7 +54,7 @@ Picked up from Phase 1: numbers only from the shared counter (now `withCounter`)
 
 Conventions later phases inherit: schema changes are appended to `MIGRATIONS` in `db.js`, never by editing `schema.sql` (v1 snapshot); an ALTER must be safe to re-run. `records.status` is `filled` or `blank`; a blank has NULL dates, `''` destination/purpose and no `record_employees`, so every reader of records filters `status = 'filled'` where dates or people matter (out today, reports, overlaps). Printing reads the record snapshot through `getPrintable` + `buildWorkbook`; the template cell map lives in `print.js` `LAYOUTS`. A template update keeps one sheet named `Form`, fit to one A4 page, and no whitespace-only cells (unit test). Font changes in exceljs go through `restyle` (styles are shared between cells). Files the app opens are only those it just saved (`records:openExport`). Tests reset `pls_to_test` by deleting rows; a test that alters the schema restores it.
 
-### Phase 3 — Browse, edit, archive LATER
+### Phase 3 — Browse, edit, archive NEXT
 
 Paused 2026-11-21: print preview (Phase 7) first, at the user's request. Not started, no branch. Plan: `docs/superpowers/plans/2026-11-21-phase-3-browse-edit-archive.md`.
 Staff need to find, fix and void what Phases 1–2 create before monitoring and reports build on it.
@@ -67,7 +67,7 @@ Covers US-8, US-9, US-10.
 
 Deliberately not built, and why: "out today" and per-office reports, because Phase 4 owns US-11 and US-12. An edit history, because no story asks for it.
 
-### Phase 7 — Print preview NEXT
+### Phase 7 — Print preview ✅ DONE (merged `7b53b1d`, 2026-11-21)
 
 Reopens Phase 2: US-6 and US-7 print flow now opens the preview first (US-15) on 2026-11-21.
 HR asked to check the filled form on screen before saving it, ahead of browsing and editing.
@@ -75,9 +75,15 @@ Covers US-15.
 
 - Print, Print again and Issue blank show the filled form on screen, then "Save as Excel" or "Close".
 
-**Done when:** in the packaged app, the preview of each of the 4 form kinds shows the hand-checked values in the template layout, "Save as Excel" produces the same .xlsx as before, and "Close" writes nothing. US-6, US-7, US-15 and CW-1 pass.
+**Done when:** in the packaged app, the preview of each of the 4 form kinds shows the hand-checked values in the template layout, "Save as Excel" produces the same .xlsx as before, and "Close" writes nothing. US-6, US-7, US-15 and CW-1 pass. — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe: all US-15 conditions incl. literal display of `<script>` text and a loaded logo; preview values equal the saved .xlsx for all 4 templates (unit); in-app preview of all 4 kinds compared by eye with the Excel renders (70/70 full E2E, 109/109 unit). Results: `docs/test-results/PHASE-7-TEST-RESULTS.md`. Regression: full suite, US-5, US-6, US-7, CW-1 pass.
+
+Shipped as `src/main/print.js`: `fillWorkbook`, `previewOf` (`buildWorkbook` now wraps `fillWorkbook`). `src/main/ipc.js` route `records:preview`. `src/renderer/components/FormPreview.jsx`. `src/renderer/pages/NewRecord.jsx` (`print(rec)` opens the preview, `saveFromPreview`). `src/renderer/index.html` CSP `img-src 'self' data:`. Tables: none.
 
 Deliberately not built, and why: preview of unsaved forms (no number yet, user decision); pixel-exact rendering through Excel (needs Excel on every PC, user decision).
+
+Picked up from Phase 2: the print flow (`records:print`, Saved to / Open file) is unchanged behind "Save as Excel".
+
+Conventions later phases inherit: every print path goes through `print(rec)` (preview first). Preview and file come from the same `fillWorkbook`, so a new template or cell change needs no preview change. Record text reaches the screen only as React text, never as HTML. A native `<dialog>` is closed through its `close` event, and async results that arrive after it closed are dropped.
 
 ## Part two — Monitoring and data safety
 
