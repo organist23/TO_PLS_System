@@ -46,7 +46,7 @@ test('outOn lists every employee on an active filled record that includes the da
   expect(await who('2026-11-21')).toEqual(['MHO Ana PLS 2026-11-1', 'MHO Ben TO 2026-11-1', 'RHU Carla PLS 2026-11-1']);
   const [ana] = (await outOn(pool, { date: '2026-11-21' })).data;
   expect(ana).toEqual({
-    recordId: ids.a.id, number: '2026-11-1', formType: 'PLS', fullName: 'Ana', officeId: ids.mho, officeName: 'MHO',
+    recordId: ids.a.id, employeeId: ids.ana, number: '2026-11-1', formType: 'PLS', fullName: 'Ana', officeId: ids.mho, officeName: 'MHO',
     destination: 'Provincial Capitol', returnAt: '2026-11-22 17:00:00', inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22',
   });
   expect((await outOn(pool, { date: '2026-11-21' })).data[1].returnAt).toBeNull();
@@ -84,7 +84,7 @@ test('officeReport rows per employee and record, counts per office and form type
   const { data } = await report();
   expect(lines(data.rows)).toEqual(['MHO Ana PLS 2026-11-1', 'MHO Ben TO 2026-11-1', 'RHU Carla PLS 2026-11-1']);
   expect(data.rows[0]).toEqual({
-    recordId: ids.a.id, number: '2026-11-1', formType: 'PLS', fullName: 'Ana', officeName: 'MHO', dateFiled: '2026-11-19',
+    recordId: ids.a.id, employeeId: ids.ana, number: '2026-11-1', formType: 'PLS', fullName: 'Ana', officeName: 'MHO', dateFiled: '2026-11-19',
     inclusiveFrom: '2026-11-20', inclusiveTo: '2026-11-22', destination: 'Provincial Capitol',
   });
   expect(data.counts).toEqual([{ officeName: 'MHO', PLS: 1, TO: 1 }, { officeName: 'RHU', PLS: 1, TO: 0 }]);

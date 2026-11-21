@@ -12,7 +12,7 @@ export async function outOn(pool, { date, officeId = null } = {}) {
   if (!isDate(date)) return fieldErrors({ date: 'Enter a valid date' });
   const oid = Number(officeId) || 0;
   const [rows] = await pool.query(
-    `SELECT r.id AS recordId, r.number, r.form_type AS formType, re.full_name AS fullName, re.office_id AS officeId,
+    `SELECT r.id AS recordId, re.employee_id AS employeeId, r.number, r.form_type AS formType, re.full_name AS fullName, re.office_id AS officeId,
             o.name AS officeName, r.destination, r.return_at AS returnAt, r.inclusive_from AS inclusiveFrom, r.inclusive_to AS inclusiveTo
        ${FROM_ACTIVE} AND r.inclusive_from <= ? AND r.inclusive_to >= ? ${oid ? 'AND re.office_id = ?' : ''}
       ORDER BY o.name, re.full_name, r.number`,
@@ -36,7 +36,7 @@ export async function officeReport(pool, { officeId = null, formType = '', from,
     ${oid ? 'AND re.office_id = ?' : ''} ${form ? 'AND r.form_type = ?' : ''}`;
   const params = [from, to, ...(oid ? [oid] : []), ...(form ? [form] : [])];
   const [rows] = await pool.query(
-    `SELECT r.id AS recordId, r.number, r.form_type AS formType, re.full_name AS fullName, o.name AS officeName,
+    `SELECT r.id AS recordId, re.employee_id AS employeeId, r.number, r.form_type AS formType, re.full_name AS fullName, o.name AS officeName,
             r.date_filed AS dateFiled, r.inclusive_from AS inclusiveFrom, r.inclusive_to AS inclusiveTo, r.destination
        ${where}
       ORDER BY o.name, re.full_name, r.inclusive_from, r.number`,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { btn, inputClass, Field, Banner } from '../components/ui.jsx';
+import { useOffices } from '../components/useOffices.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const thisMonth = () => {
@@ -14,7 +15,7 @@ const IDLE = { pending: false, path: '', error: '' };
 export default function Reports() {
   const [filters, setFilters] = useState(() => ({ officeId: '', formType: '', ...thisMonth() }));
   const [query, setQuery] = useState(filters); // debounced filters
-  const [offices, setOffices] = useState({ rows: [], error: '' });
+  const offices = useOffices();
   const [report, setReport] = useState({ status: 'loading', rows: [], counts: [] });
   const [exporting, setExporting] = useState(IDLE);
   const seq = useRef(0);
@@ -33,11 +34,6 @@ export default function Reports() {
   }, [query]);
   useEffect(() => void load(), [load]);
 
-  const loadOffices = useCallback(async () => {
-    const res = await window.api.invoke('offices:list', {});
-    setOffices(res.ok ? { rows: res.data, error: '' } : { rows: [], error: res.error });
-  }, []);
-  useEffect(() => void loadOffices(), [loadOffices]);
 
   async function exportFile() {
     setExporting({ ...IDLE, pending: true });
@@ -65,17 +61,18 @@ export default function Reports() {
     </div>
   );
   const ready = report.status === 'ready';
+  // Export waits until the rows on screen match the inputs (filters !== query during the debounce).
 
   return (
     <section className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-semibold text-slate-900">Reports</h1>
         <button type="button" className={btn.primary} onClick={exportFile}
-          disabled={!ready || report.rows.length === 0 || exporting.pending}>
+          disabled={!ready || filters !== query || report.rows.length === 0 || exporting.pending}>
           {exporting.pending ? 'Exporting…' : 'Export to Excel'}
         </button>
       </div>
-      {offices.error && <Banner action={<button className={btn.link} onClick={loadOffices}>Retry</button>}>{offices.error}</Banner>}
+      {offices.error && <Banner action={<button className={btn.link} onClick={offices.retry}>Retry</button>}>{offices.error}</Banner>}
       {exporting.path && (
         <div className="flex items-center gap-3">
           <span className="text-sm text-slate-700">Saved to {exporting.path}</span>
@@ -143,7 +140,7 @@ export default function Reports() {
             </thead>
             <tbody className="divide-y divide-slate-200">
               {report.rows.map((r) => (
-                <tr key={`${r.recordId}-${r.fullName}`}>
+                <tr key={`${r.recordId}-${r.employeeId}`}>
                   <td className="px-4 py-3 text-slate-600">{r.officeName}</td>
                   <td className="px-4 py-3 font-medium text-slate-900">{r.fullName}</td>
                   <td className="px-4 py-3 text-slate-600">{r.formType}</td>

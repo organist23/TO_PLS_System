@@ -75,6 +75,27 @@ test.describe('US-12 Per-office report and Excel export', () => {
     await expect.poll(() => tableRows(rows())).toEqual([NOV()[0], NOV()[2]]);
   });
 
+  test('an archived office can still be chosen; its records keep the saved office', async () => {
+    const [[rhu]] = await pool.query("SELECT id FROM offices WHERE name = 'RHU'");
+    const [[pena]] = await pool.query("SELECT id FROM employees WHERE full_name = 'MARIA PEÑA'");
+    expect((await invoke(page, 'employees:archive', { id: pena.id })).ok).toBe(true);
+    expect((await invoke(page, 'offices:archive', { id: rhu.id })).ok).toBe(true);
+    await page.getByRole('navigation').getByRole('button', { name: 'Reports' }).click(); // reload the office list
+    await range('2026-11-01', '2026-11-30');
+    await page.getByLabel('Office', { exact: true }).selectOption({ label: 'RHU (archived)' });
+    await expect.poll(() => tableRows(rows())).toEqual([NOV()[2]]);
+  });
+
+  test('Export waits until the rows on screen match the filters', async () => {
+    await range('2026-11-01', '2026-11-30');
+    const exportButton = page.getByRole('button', { name: 'Export to Excel' });
+    await expect(exportButton).toBeEnabled();
+    await page.getByLabel('Form').selectOption('TO');
+    expect(await exportButton.isDisabled()).toBe(true); // read once, no retry: the 250 ms debounce is still running
+    await expect.poll(() => tableRows(rows())).toEqual([NOV()[1]]);
+    await expect(exportButton).toBeEnabled();
+  });
+
   test('a date range with end before start is rejected', async () => {
     await range('2026-11-12', '2026-11-11');
     await expect(page.locator('#rep-to-error')).toHaveText('End date is before start date');

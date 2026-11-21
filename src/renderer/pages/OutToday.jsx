@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { btn, inputClass, Field, Banner } from '../components/ui.jsx';
+import { useOffices } from '../components/useOffices.js';
 
 const localDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const dateTime = (dt) => (dt ? dt.slice(0, 16) : '—');
@@ -8,7 +9,7 @@ const dateTime = (dt) => (dt ? dt.slice(0, 16) : '—');
 export default function OutToday() {
   const [date, setDate] = useState(() => localDate(new Date()));
   const [officeId, setOfficeId] = useState('');
-  const [offices, setOffices] = useState({ rows: [], error: '' });
+  const offices = useOffices();
   const [list, setList] = useState({ status: 'loading', rows: [] });
   const seq = useRef(0);
 
@@ -21,16 +22,11 @@ export default function OutToday() {
   }, [date, officeId]);
   useEffect(() => void load(), [load]);
 
-  const loadOffices = useCallback(async () => {
-    const res = await window.api.invoke('offices:list', {});
-    setOffices(res.ok ? { rows: res.data, error: '' } : { rows: [], error: res.error });
-  }, []);
-  useEffect(() => void loadOffices(), [loadOffices]);
 
   return (
     <section className="space-y-6">
       <h1 className="text-2xl font-semibold text-slate-900">Out today</h1>
-      {offices.error && <Banner action={<button className={btn.link} onClick={loadOffices}>Retry</button>}>{offices.error}</Banner>}
+      {offices.error && <Banner action={<button className={btn.link} onClick={offices.retry}>Retry</button>}>{offices.error}</Banner>}
 
       <div className="flex flex-wrap items-start gap-4">
         <div className="w-44">
@@ -65,7 +61,7 @@ export default function OutToday() {
           </thead>
           <tbody className="divide-y divide-slate-200">
             {list.rows.map((r) => (
-              <tr key={`${r.recordId}-${r.fullName}`}>
+              <tr key={`${r.recordId}-${r.employeeId}`}>
                 <td className="px-4 py-3 text-slate-600">{r.officeName}</td>
                 <td className="px-4 py-3 font-medium text-slate-900">{r.fullName}</td>
                 <td className="px-4 py-3 text-slate-600">{r.formType}</td>
