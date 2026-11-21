@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const ExcelJS = createRequire(import.meta.url)('exceljs'); // Playwright's ESM loader cannot import exceljs directly
-import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath } from '../helpers.js';
+import { launchApp, loginAsChangedAdmin, seedDirectory, thisMonth, mockSaveDialog, mockOpenPath, saveFromPreview } from '../helpers.js';
 
 test.describe('US-7 Issue a numbered blank form', () => {
   let app, page, pool, file;
@@ -30,6 +30,7 @@ test.describe('US-7 Issue a numbered blank form', () => {
   async function issue() {
     await button('Issue blank form').click();
     await page.getByRole('dialog').getByRole('button', { name: 'Issue blank' }).click();
+    await saveFromPreview(page);
     await expect(page.getByText(`Saved to ${file}`)).toBeVisible();
   }
 
@@ -100,6 +101,7 @@ test.describe('US-7 Issue a numbered blank form', () => {
     await expect(page.getByRole('status')).toHaveText(`Saved PLS ${thisMonth()}-2`);
 
     await blanksTable().getByRole('button', { name: `Print again ${thisMonth()}-1` }).click();
+    await saveFromPreview(page);
     await expect(page.getByText(`Saved to ${file}`)).toBeVisible();
     await expect(page.getByRole('status')).toHaveCount(0);
     const wb = new ExcelJS.Workbook();
