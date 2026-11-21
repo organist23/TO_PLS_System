@@ -130,22 +130,28 @@ Picked up from Phase 2: numbers only from `withCounter`, now N at a time. Picked
 
 Conventions later phases inherit: `records.recommending_*` can be NULL only on a Mayor's Office blank; a filled record always has one. A number is unique only with its form type, so lookups use form type + number. Permanent delete exists only in `deleteUnusedBlanks` (status `blank`, past period); everything else stays archive-only. A multi-form .xlsx is one sheet per form, all sheets selected, workbook active tab 0. E2E creates past-month rows by SQL, since the app numbers only in the current month.
 
-### Phase 9 — Paper-first encoding NEXT
+### Phase 9 — Paper-first encoding ✅ DONE (merged `d9eed34`, 2026-11-21)
 
 Reopens Phase 1: direct record creation (US-5 Save form and `records:create`) is removed; US-5 rules apply when encoding. Reopens Phase 8: the New record page becomes Forms (Print blank forms, Encode a returned form, Blank forms to fill).
 Every PLS/TO starts as a printed blank form; HR types details only when encoding the returned paper (user decision 2026-11-21).
-Covers US-5 (changed), CW-1 (changed).
+Covers US-5 (changed), CW-1 (changed). User decisions during review 2026-11-21: the Mayor's Office Department Head is pre-filled from the recommending default on Fill in (US-7 changed); no "encoded by" is recorded.
 
 - Forms page: no direct-input form; the fill-in form appears only for Fill in and for Edit (US-8).
 - `records:create` and `createRecord` removed; tests and E2E seeds create records by issuing a blank and filling it.
 
-**Done when:** in the packaged app, there is no way to save a record without a blank form first (no Save-only form, `records:create` refused by the preload allowlist), every US-5 condition passes through Encode, CW-1 passes as US-1 → US-3 → US-4 → US-16 → US-17 → US-6, and the full E2E suite passes.
+**Done when:** in the packaged app, there is no way to save a record without a blank form first (no Save-only form, `records:create` refused by the preload allowlist), every US-5 condition passes through Encode, CW-1 passes as US-1 → US-3 → US-4 → US-16 → US-17 → US-6, and the full E2E suite passes. — **Verified** on 2026-11-21 with Playwright `_electron` against the packaged `win-unpacked` exe: all US-5 conditions through Encode, no direct input (no record form on idle Forms, `records:create` not allowed), CW-1 paper first (117/117 full E2E, 169/169 unit). Results: `docs/test-results/PHASE-9-TEST-RESULTS.md`. Regression: full suite, every story and CW-1, CW-2, CW-4 pass.
 
-Deliberately not built, and why: a walk-in exception (user decision: one path, blank then encode).
+Shipped as `src/main/records.js`: `createRecord` removed (`issueBlanks` is the only insert into `records`). `src/main/ipc.js`: route `records:create` removed; `src/main/preload.cjs` allowlist without it. `src/renderer/pages/NewRecord.jsx` (Forms: record form only for Fill in and Edit; Department Head pre-filled from `defaults.MAYOR.recommending`). `src/renderer/App.jsx` (menu `Forms`). `tests/e2e/helpers.js`: `seedRecord` (issue + fill), `openReturnedBlank`, `pickDepartmentHead`, `recordForm`, `blankFormsSection`. Tables: none.
 
-### Phase 5 — Backup and restore LATER
+Deliberately not built, and why: a walk-in exception (user decision: one path, blank then encode). An "encoded by" user on records (user decision: not needed).
 
-On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request), NEXT again after Phase 8, then LATER again for Phase 9 (user request).
+Picked up from Phase 8: blanks, Encode by number, Fill in with the Department Head. Picked up from Phase 1: US-5 rules, now applied by `fillBlank`.
+
+Conventions later phases inherit: a record is created only by `issueBlanks` then `fillBlank`; there is no direct-create path or route. Tests make records the same way (`seedRecord` through IPC, `openReturnedBlank` through the UI). The page key stays `newRecord`, its label is `Forms`; E2E finds the page heading with `{ name: 'Forms', exact: true }`. `created_by` is the user who issued the blank.
+
+### Phase 5 — Backup and restore NEXT
+
+On hold 2026-11-21: the user asked to stop before Phase 5. Not started, no branch. Moved back to LATER for Phase 8 (user request), NEXT again after Phase 8, then LATER again for Phase 9 (user request), NEXT again after Phase 9.
 
 Covers US-13, US-14.
 
