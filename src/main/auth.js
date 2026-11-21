@@ -42,9 +42,12 @@ export async function login(pool, username, password) {
   };
 }
 
+// US-1 password rule, shared with US-2 (new and reset passwords).
+export const passwordError = (pw) => (String(pw ?? '').length < 8 ? 'At least 8 characters' : null);
+
 export async function changePassword(pool, userId, newPassword) {
   const pw = String(newPassword ?? '');
-  if (pw.length < 8) return { ok: false, errors: { newPassword: 'At least 8 characters' } };
+  if (passwordError(pw)) return { ok: false, errors: { newPassword: passwordError(pw) } };
   const [[row]] = await pool.query('SELECT password_hash FROM users WHERE id = ?', [userId]);
   if (await verifyPassword(pw, row.password_hash)) {
     return { ok: false, errors: { newPassword: 'Must differ from the current password' } };
